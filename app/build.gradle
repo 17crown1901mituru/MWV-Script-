@@ -1,16 +1,48 @@
-Error
-java.io.FileNotFoundException: open failed: ENOENT (No such file or directory)
-	at android.database.DatabaseUtils.readExceptionWithFileNotFoundExceptionFromParcel(DatabaseUtils.java:164)
-	at android.content.ContentProviderProxy.openTypedAssetFile(ContentProviderNative.java:814)
-	at android.content.ContentResolver.openTypedAssetFileDescriptor(ContentResolver.java:2045)
-	at android.content.ContentResolver.openAssetFileDescriptor(ContentResolver.java:1860)
-	at android.content.ContentResolver.openFileDescriptor(ContentResolver.java:1691)
-	at android.content.ContentResolver.openFileDescriptor(ContentResolver.java:1637)
-	at l.ۡ᩻ۗ.<init>(X4H2:34)
-	at l.ۜ᩻ۗ.᩷(54XA:35)
-	at l.ܽۙܿ.᩷(L16D:237)
-	at l.᩹ܺܿ.call(K16C:0)
-	at java.util.concurrent.FutureTask.run(FutureTask.java:317)
-	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1154)
-	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:652)
-	at java.lang.Thread.run(Thread.java:1564)
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+android {
+    namespace 'com.mwvscript.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.mwvscript.app"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            applicationIdSuffix ".debug"
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    buildFeatures {
+        viewBinding true
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.lifecycle:lifecycle-service:2.7.0'
+    implementation 'com.google.code.gson:gson:2.10.1'
+}
