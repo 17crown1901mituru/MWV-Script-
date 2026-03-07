@@ -42,7 +42,7 @@ class ScriptEngineService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         updateNotification("エンジン実行中")
-        return START_STICKY  // 強制終了されても自動再起動
+        return START_STICKY
     }
 
     override fun onDestroy() {
@@ -66,7 +66,7 @@ class ScriptEngineService : Service() {
     }
 
     private fun buildNotification(text: String): Notification {
-        val intent = Intent(this, MainActivity::class.java)
+        val intent = Intent(this, Class.forName("com.mwvscript.app.MainActivity"))
         val pi = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("MWV Script")
