@@ -73,8 +73,6 @@ class ScriptBridge(private val context: Context, private val accountId: String) 
         }
     }
 
-    // ── UI操作 ────────────────────────────────────────────────────────────────
-
     @JavascriptInterface
     fun log(message: String) {
         android.util.Log.d("MWVScript[$accountId]", message)
