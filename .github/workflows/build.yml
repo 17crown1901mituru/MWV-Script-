@@ -25,12 +25,14 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Find APK
-        run: find . -name "*.apk" 2>/dev/null || echo "No APK found"
+        if: success()
+        run: find . -name "*.apk"
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: MWV-Script-debug
