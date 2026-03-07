@@ -20,7 +20,7 @@
         android:roundIcon="@drawable/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.MWVScript"
-        android:usesCleartextTraffic="true"
+        android:usesCleartextTraffic="true">
         
 
         <activity
