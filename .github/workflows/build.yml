@@ -28,13 +28,11 @@ jobs:
           unzip -q /tmp/gradle.zip -d /opt/gradle
           echo "/opt/gradle/gradle-8.4/bin" >> $GITHUB_PATH
 
-      - name: Generate Gradle Wrapper
-        run: gradle wrapper --gradle-version=8.4 --distribution-type=bin
+      - name: Check project structure
+        run: gradle projects
 
       - name: Build Debug APK
-        run: |
-          chmod +x gradlew
-          ./gradlew :app:assembleDebug
+        run: gradle :app:assembleDebug
 
       - name: Upload APK
         if: success()
