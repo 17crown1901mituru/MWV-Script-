@@ -1,7 +1,6 @@
 package com.mwvscript.app
 
 import android.app.*
-import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import android.webkit.WebView
@@ -66,7 +65,7 @@ class ScriptEngineService : Service() {
     }
 
     private fun buildNotification(text: String): Notification {
-        val intent = Intent(this, Class.forName("com.mwvscript.app.MainActivity"))
+        val intent = Intent(this, MainActivity::class.java)
         val pi = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("MWV Script")
