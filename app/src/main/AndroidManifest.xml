@@ -33,11 +33,12 @@
     <!-- オーバーレイ -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
-    <!-- 位置情報（JS側で使う可能性） -->
+    <!-- 位置情報 -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <application
+        android:name="androidx.multidex.MultiDexApplication"
         android:allowBackup="true"
         android:icon="@drawable/ic_launcher"
         android:label="MWV Script"
@@ -57,13 +58,11 @@
             </intent-filter>
         </activity>
 
-        <!-- Script Engine Background Service -->
         <service
             android:name=".ScriptEngineService"
             android:foregroundServiceType="dataSync"
             android:exported="false" />
 
-        <!-- 再起動後の自動起動 -->
         <receiver
             android:name=".BootReceiver"
             android:exported="true">
