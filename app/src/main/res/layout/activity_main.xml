@@ -39,7 +39,7 @@
             android:imeOptions="actionGo"
             android:singleLine="true"
             android:hint="URLを入力..."
-            android:hintTextColor="#6b6b8a" />
+            android:textColorHint="#6b6b8a" />
 
         <ImageButton
             android:id="@+id/btnScripts"
