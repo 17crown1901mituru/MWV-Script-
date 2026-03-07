@@ -29,14 +29,12 @@ jobs:
           echo "/opt/gradle/gradle-8.4/bin" >> $GITHUB_PATH
 
       - name: Generate Gradle Wrapper
-        run: |
-          cd $GITHUB_WORKSPACE
-          gradle wrapper --gradle-version=8.4 --distribution-type=bin
+        run: gradle wrapper --gradle-version=8.4 --distribution-type=bin
 
       - name: Build Debug APK
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew :app:assembleDebug
 
       - name: Upload APK
         if: success()
