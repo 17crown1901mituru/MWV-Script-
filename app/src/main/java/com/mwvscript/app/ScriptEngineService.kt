@@ -5,6 +5,10 @@ import android.content.Intent
 import android.os.IBinder
 import android.webkit.WebView
 import androidx.core.app.NotificationCompat
+import com.faendir.rhino_android.RhinoAndroidHelper
+import org.mozilla.javascript.Context
+import org.mozilla.javascript.ImporterTopLevel
+import org.mozilla.javascript.Scriptable
 
 class ScriptEngineService : Service() {
 
@@ -12,6 +16,10 @@ class ScriptEngineService : Service() {
         var isRunning = false
         const val CHANNEL_ID = "mwv_engine"
         const val NOTIF_ID = 1001
+
+        // Rhinoスコープをサービス外から参照できるようにシングルトンで保持
+        var rhinoContext: Context? = null
+        var rhinoScope: Scriptable? = null
     }
 
     private var engineWebView: WebView? = null
@@ -21,7 +29,29 @@ class ScriptEngineService : Service() {
         createNotificationChannel()
         startForeground(NOTIF_ID, buildNotification("エンジン起動中..."))
         isRunning = true
+        initRhino()
         initEngineWebView()
+    }
+
+    private fun initRhino() {
+        try {
+            val helper = RhinoAndroidHelper(this)
+            rhinoContext = helper.enterContext()
+            rhinoContext?.optimizationLevel = -1  // Android上では-1必須
+            rhinoScope = ImporterTopLevel(rhinoContext)
+            android.util.Log.d("MWVScript", "Rhinoエンジン初期化完了")
+        } catch (e: Exception) {
+            android.util.Log.e("MWVScript", "Rhino初期化失敗: ${e.message}")
+        }
+    }
+
+    fun evaluateRhino(script: String): String {
+        return try {
+            val result = rhinoContext?.evaluateString(rhinoScope, script, "<mwv>", 1, null)
+            Context.toString(result)
+        } catch (e: Exception) {
+            "Error: ${e.message}"
+        }
     }
 
     private fun initEngineWebView() {
@@ -47,6 +77,11 @@ class ScriptEngineService : Service() {
     override fun onDestroy() {
         isRunning = false
         engineWebView?.destroy()
+        try {
+            rhinoContext?.let { Context.exit() }
+        } catch (e: Exception) { }
+        rhinoContext = null
+        rhinoScope = null
         super.onDestroy()
     }
 
