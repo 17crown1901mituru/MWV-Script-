@@ -30,8 +30,6 @@ class ScriptBridge(private val context: Context, private val accountId: String) 
         return com.google.gson.Gson().toJson(result)
     }
 
-    // ── ファイル操作 ───────────────────────────────────────────────────────────
-
     @JavascriptInterface
     fun readFile(relativePath: String): String {
         return try {
