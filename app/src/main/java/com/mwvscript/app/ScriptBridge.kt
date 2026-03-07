@@ -6,7 +6,6 @@ import java.io.File
 
 class ScriptBridge(private val context: Context, private val accountId: String) {
 
-    // タブ間メッセージング用（シングルトンで共有）
     companion object {
         private val messageQueue = mutableMapOf<String, MutableList<String>>()
 
@@ -30,6 +29,8 @@ class ScriptBridge(private val context: Context, private val accountId: String) 
         msgs.clear()
         return com.google.gson.Gson().toJson(result)
     }
+
+    // ── ファイル操作 ───────────────────────────────────────────────────────────
 
     @JavascriptInterface
     fun readFile(relativePath: String): String {
@@ -57,6 +58,22 @@ class ScriptBridge(private val context: Context, private val accountId: String) 
             com.google.gson.Gson().toJson(files)
         } catch (e: Exception) { "[]" }
     }
+
+    // ── Rhinoエンジン経由でAndroid APIを直叩き ─────────────────────────────────
+
+    @JavascriptInterface
+    fun rhinoEval(script: String): String {
+        val service = ScriptEngineService.rhinoContext ?: return "Error: Rhinoエンジン未起動"
+        val scope = ScriptEngineService.rhinoScope ?: return "Error: Rhinoスコープ未初期化"
+        return try {
+            val result = service.evaluateString(scope, script, "<rhino>", 1, null)
+            org.mozilla.javascript.Context.toString(result)
+        } catch (e: Exception) {
+            "Error: ${e.message}"
+        }
+    }
+
+    // ── UI操作 ────────────────────────────────────────────────────────────────
 
     @JavascriptInterface
     fun log(message: String) {
