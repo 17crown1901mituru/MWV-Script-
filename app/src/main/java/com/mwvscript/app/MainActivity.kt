@@ -234,7 +234,13 @@ class MainActivity : AppCompatActivity() {
     // ── PERSISTENCE ───────────────────────────────────────────────────────────
 
     private fun saveTabs() {
-        val data = tabs.map { mapOf("label" to it.label, "url" to it.webView?.url ?: it.url, "accountId" to it.accountId) }
+        val data = tabs.map { tab ->
+            val m = HashMap<String, String>()
+            m["label"] = tab.label
+            m["url"] = tab.webView?.url ?: tab.url
+            m["accountId"] = tab.accountId
+            m
+        }
         getSharedPreferences("mwv", MODE_PRIVATE).edit()
             .putString("tabs", gson.toJson(data)).apply()
     }
@@ -242,7 +248,8 @@ class MainActivity : AppCompatActivity() {
     private fun loadSavedTabs() {
         val json = getSharedPreferences("mwv", MODE_PRIVATE).getString("tabs", null) ?: return
         try {
-            val list = gson.fromJson(json, Array<Map<String, String>>::class.java)
+            val type = object : com.google.gson.reflect.TypeToken<List<HashMap<String, String>>>() {}.type
+            val list: List<HashMap<String, String>> = gson.fromJson(json, type)
             list.forEach { addTab(it["label"] ?: "Tab", it["url"] ?: "https://google.com", it["accountId"] ?: "1") }
         } catch (e: Exception) { }
     }
