@@ -28,11 +28,17 @@ jobs:
           unzip -q /tmp/gradle.zip -d /opt/gradle
           echo "/opt/gradle/gradle-8.4/bin" >> $GITHUB_PATH
 
+      - name: Clean
+        run: gradle clean
+
       - name: Build Debug APK
         run: gradle :app:assembleDebug
 
-      - name: Find APK
-        run: find . -name "*.apk" -type f
+      - name: Verify APK contents
+        run: |
+          APK=$(find . -name "*.apk" -type f | head -1)
+          echo "APK: $APK"
+          unzip -p "$APK" classes.dex | strings | grep "mwvscript" | head -20
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
