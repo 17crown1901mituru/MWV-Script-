@@ -32,7 +32,7 @@ jobs:
         run: gradle projects
 
       - name: Build Debug APK
-        run: gradle :app:assembleDebug --info 2>&1 | tail -100
+        run: gradle :app:assembleDebug --stacktrace 2>&1 | grep -A 30 "compileDebugKotlin\|error:\|Error\|FAILED"
 
       - name: Upload APK
         if: success()
