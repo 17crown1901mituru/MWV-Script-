@@ -28,14 +28,13 @@ jobs:
           unzip -q /tmp/gradle.zip -d /opt/gradle
           echo "/opt/gradle/gradle-8.4/bin" >> $GITHUB_PATH
 
-      - name: Check project structure
-        run: gradle projects
-
       - name: Build Debug APK
-        run: gradle :app:assembleDebug --stacktrace 2>&1 | grep -A 30 "compileDebugKotlin\|error:\|Error\|FAILED"
+        run: gradle :app:assembleDebug
+
+      - name: Find APK
+        run: find . -name "*.apk" -type f
 
       - name: Upload APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: MWV-Script-debug
