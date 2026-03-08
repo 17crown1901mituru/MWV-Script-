@@ -86,14 +86,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleInput(input: String) {
         Thread {
-            val cx = ScriptEngineService.rhinoContext
             val scope = ScriptEngineService.rhinoScope
-            if (cx == null || scope == null) {
+            if (scope == null) {
                 printLine("エラー: Rhinoエンジン未起動")
                 return@Thread
             }
             try {
+                val cx = org.mozilla.javascript.Context.enter()
+                cx.optimizationLevel = -1
                 val result = cx.evaluateString(scope, input, "<terminal>", 1, null)
+                org.mozilla.javascript.Context.exit()
                 val str = org.mozilla.javascript.Context.toString(result)
                 if (str != "undefined") printLine(str)
             } catch (e: Exception) {
