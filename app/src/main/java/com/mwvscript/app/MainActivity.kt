@@ -9,8 +9,6 @@ import android.webkit.WebViewClient
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.webkit.ProfileStore
-import androidx.webkit.WebViewCompat
 import com.google.gson.Gson
 import java.io.File
 
@@ -114,12 +112,7 @@ class MainActivity : AppCompatActivity() {
     // ── WEBVIEW FACTORY ───────────────────────────────────────────────────────
 
     private fun createWebView(accountId: String): WebView {
-        // アカウントIDごとに独立したProfileを作成 → クッキー完全分離
-        val profileStore = ProfileStore.getInstance()
-        val profileName = "account_$accountId"
-        val profile = profileStore.getOrCreateProfile(profileName)
-
-        val wv = WebViewCompat.createWebView(this, profile)
+        val wv = WebView(this)
         wv.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
