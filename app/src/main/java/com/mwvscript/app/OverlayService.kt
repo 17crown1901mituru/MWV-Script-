@@ -6,7 +6,8 @@ import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.*
 import android.view.*
-import android.view.inputmethod.InputMethodManager
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.*
 import androidx.core.app.NotificationCompat
 import org.mozilla.javascript.ScriptableObject
@@ -32,6 +33,10 @@ class OverlayService : Service() {
     private var isShowing = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    // WebView（INVISIBLEのままWindowManagerに保持）
+    private var webView: WebView? = null
+    private var webViewShowing = false
+
     // オーバーレイターミナル用
     private lateinit var terminalContainer: LinearLayout
     private lateinit var scrollView: ScrollView
@@ -49,6 +54,33 @@ class OverlayService : Service() {
             startForeground(NOTIF_ID, buildNotification())
         }
         injectOverlayBridge()
+        initWebView()
+    }
+
+    private fun initWebView() {
+        mainHandler.post {
+            val wv = WebView(this).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.databaseEnabled = true
+                webViewClient = WebViewClient()
+                visibility = View.INVISIBLE
+            }
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT
+            )
+            try {
+                windowManager.addView(wv, params)
+                webView = wv
+            } catch (e: Exception) {
+                android.util.Log.e("MWVScript", "WebView初期化失敗: ${e.message}")
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -60,6 +92,11 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         hideOverlay()
+        webView?.let {
+            try { windowManager.removeView(it) } catch (e: Exception) {}
+            it.destroy()
+            webView = null
+        }
         instance = null
         super.onDestroy()
     }
@@ -84,7 +121,7 @@ class OverlayService : Service() {
         val view = buildOverlayView()
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
-            getScreenHeight() / 2,
+            getScreenHeight() * 35 / 100,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
@@ -195,96 +232,22 @@ class OverlayService : Service() {
             hint = "> "
             setHintTextColor(android.graphics.Color.GRAY)
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                    android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
                     android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_ENTER_ACTION
-            isSingleLine = false
-            minLines = 1
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_GO
+            isSingleLine = true
+            setOnEditorActionListener { _, _, _ ->
+                runInput()
+                true
+            }
         }
 
-        // エクストラキーボード
-        val extraKeyboard = buildExtraKeyboard()
-
         root.addView(header)
-        root.addView(scrollView)
         root.addView(activeInput)
-        root.addView(extraKeyboard)
+        root.addView(scrollView)
 
         return root
     }
 
-    private fun buildExtraKeyboard(): LinearLayout {
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(android.graphics.Color.parseColor("#111111"))
-        }
-
-        val symbolRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(4, 4, 4, 0)
-        }
-        listOf("()", "\"", "'", ";", ".", "/").forEach { symbol ->
-            symbolRow.addView(extraKey(symbol) {
-                val pos = activeInput.selectionStart
-                activeInput.text.insert(pos, symbol)
-            })
-        }
-        container.addView(symbolRow)
-
-        val actionRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(4, 4, 4, 4)
-        }
-
-        actionRow.addView(extraKey("RUN", android.graphics.Color.parseColor("#005500")) {
-            runInput()
-        })
-
-        actionRow.addView(extraKey("PASTE") {
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            val text = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: return@extraKey
-            val pos = activeInput.selectionStart
-            activeInput.text.insert(pos, text)
-        })
-
-        actionRow.addView(extraKey("COPY") {
-            val selected = activeInput.text.substring(
-                activeInput.selectionStart.coerceAtLeast(0),
-                activeInput.selectionEnd.coerceAtLeast(0)
-            )
-            if (selected.isNotEmpty()) {
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("copied", selected))
-                appendOutput("コピーしました")
-            }
-        })
-
-        actionRow.addView(extraKey("KB") {
-            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-            imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
-        })
-
-        container.addView(actionRow)
-        return container
-    }
-
-    private fun extraKey(
-        label: String,
-        bgColor: Int = android.graphics.Color.parseColor("#222222"),
-        onClick: () -> Unit
-    ): Button {
-        return Button(this).apply {
-            text = label
-            textSize = 11f
-            setTextColor(android.graphics.Color.WHITE)
-            setBackgroundColor(bgColor)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                setMargins(2, 2, 2, 2)
-            }
-            setPadding(4, 8, 4, 8)
-            setOnClickListener { onClick() }
-        }
-    }
 
     // ======================================================
     // ターミナル入出力
@@ -297,6 +260,7 @@ class OverlayService : Service() {
                 setTextColor(android.graphics.Color.GREEN)
                 textSize = 12f
                 typeface = android.graphics.Typeface.MONOSPACE
+                setTextIsSelectable(true)
                 this.text = text
             }
             terminalContainer.addView(tv)
@@ -370,7 +334,6 @@ class OverlayService : Service() {
         val cx = org.mozilla.javascript.Context.enter()
         cx.optimizationLevel = -1
         val overlay = cx.newObject(scope) as org.mozilla.javascript.NativeObject
-        org.mozilla.javascript.Context.exit()
 
         ScriptableObject.putProperty(overlay, "show", object : org.mozilla.javascript.BaseFunction() {
             override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
@@ -396,6 +359,55 @@ class OverlayService : Service() {
 
         ScriptableObject.putProperty(scope, "overlay", overlay)
         android.util.Log.d("MWVScript", "overlayブリッジ注入完了")
+
+        // WebViewブリッジ
+        val web = cx.newObject(scope) as org.mozilla.javascript.NativeObject
+        org.mozilla.javascript.Context.exit()
+
+        ScriptableObject.putProperty(web, "open", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val url = args.getOrNull(0)?.let { org.mozilla.javascript.Context.toString(it) } ?: return null
+                mainHandler.post {
+                    webView?.let {
+                        it.loadUrl(url)
+                        it.visibility = View.VISIBLE
+                        webViewShowing = true
+                        // WebView表示中はFOCUSABLEに更新
+                        val params = (it.layoutParams as WindowManager.LayoutParams).apply {
+                            flags = flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+                        }
+                        windowManager.updateViewLayout(it, params)
+                    }
+                }
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        ScriptableObject.putProperty(web, "close", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                mainHandler.post {
+                    webView?.let {
+                        it.visibility = View.INVISIBLE
+                        webViewShowing = false
+                        val params = (it.layoutParams as WindowManager.LayoutParams).apply {
+                            flags = flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        }
+                        windowManager.updateViewLayout(it, params)
+                    }
+                }
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        ScriptableObject.putProperty(web, "eval", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val js = args.getOrNull(0)?.let { org.mozilla.javascript.Context.toString(it) } ?: return null
+                mainHandler.post { webView?.evaluateJavascript(js, null) }
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        ScriptableObject.putProperty(scope, "web", web)
     }
 
     // ======================================================
