@@ -35,13 +35,11 @@ app/src/main/java/com/mwvscript/app/
 
 ファイル名だけで実行できる基準ディレクトリ。
 
-
 ---
 
 ## 起動時の自動実行
 
 CDに`init.rjs`を置くと、エンジン起動時に自動で読み込まれる。
-
 
 `init.rjs`の中身は自由に書き換え可能。例：
 
@@ -104,6 +102,8 @@ print("初期化完了");
 
 GitHub Actionsが自動でdebug APKをビルド。  
 ActionsタブからAPKをダウンロードしてインストール。
+
+---
 
 ## 動作要件
 
