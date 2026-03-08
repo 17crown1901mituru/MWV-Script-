@@ -75,7 +75,7 @@ class MainActivity : AppCompatActivity() {
         Thread {
             val apps = getLaunchableApps()
             mainHandler.post {
-                grid.adapter = AppGridAdapter(this, apps)
+                grid.adapter = AppGridAdapter(apps)
                 grid.setOnItemClickListener { _, _, position, _ ->
                     val app = apps[position]
                     val intent = packageManager.getLaunchIntentForPackage(app.packageName)
@@ -108,7 +108,6 @@ class MainActivity : AppCompatActivity() {
     )
 
     inner class AppGridAdapter(
-        context: Context,
         private val apps: List<AppInfo>
     ) : BaseAdapter() {
 
@@ -118,17 +117,17 @@ class MainActivity : AppCompatActivity() {
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val app = apps[position]
-            val container = LinearLayout(context).apply {
+            val container = LinearLayout(this@MainActivity).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = android.view.Gravity.CENTER
                 setPadding(8, 12, 8, 12)
             }
-            val icon = ImageView(context).apply {
+            val icon = ImageView(this@MainActivity).apply {
                 setImageDrawable(app.icon)
                 layoutParams = LinearLayout.LayoutParams(96, 96)
                 scaleType = ImageView.ScaleType.FIT_CENTER
             }
-            val label = TextView(context).apply {
+            val label = TextView(this@MainActivity).apply {
                 text = app.label
                 setTextColor(android.graphics.Color.WHITE)
                 textSize = 10f
