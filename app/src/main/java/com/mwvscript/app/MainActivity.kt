@@ -227,16 +227,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Activityが前面に戻った時もactivityRefを更新
         ScriptEngineService.activityRef = this
-        if (ScriptEngineService.isRunning) {
-            ScriptEngineService.rhinoScope?.let {
-                ScriptEngineService.rhinoContext?.let { cx ->
-                    val service = ScriptEngineService()
-                    service.injectActivityDependencies(cx, it)
-                }
-            }
-        }
     }
 
     // ── PERSISTENCE ───────────────────────────────────────────────────────────
