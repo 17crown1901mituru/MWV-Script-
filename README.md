@@ -1,54 +1,125 @@
 # MWV Script
 
-**M**ulti **W**eb**V**iew **S**cript
+Android上でJavaScriptを直接実行できる、Rhinoエンジン搭載のスクリプト実行環境。
 
-Androidアプリ。複数アカウントを独立したCookieStoreで同時ログインできるWebViewブラウザ + バックグラウンドJSエンジン。
+---
 
-## 機能
+## 概要
 
-- **マルチタブ** — タブごとに独立したWebViewとCookieStore
-- **複数アカウント同時ログイン** — 同一ドメインに複数アカウントで並列操作
-- **JS自動注入** — `/sdcard/Android/data/com.mwvscript.app/files/scripts/` にJSファイルを置くと自動注入
-- **バックグラウンド常駐** — Foreground ServiceでアプリをバックグラウンドにしてもJS実行継続
-- **タブ間通信** — `MWVScript.postToAccount(id, msg)` でタブ間メッセージング
+- **ターミナル画面**からJS式・スクリプトファイルをその場で実行
+- **Rhino JSエンジン**がバックグラウンド常駐し、Android APIを直接操作可能
+- **WebViewActivity**でDOM操作・JS注入が可能な`.js`スクリプトにも対応
+- 再起動後も**BootReceiver**で自動起動
 
-## スクリプトの書き方
+---
 
-```javascript
-// @name    My Script
-// @match   https://example.com/*
-// @version 1.0.0
-
-// MWVScriptブリッジが使える
-const accountId = MWVScript.getAccountId();
-MWVScript.log('Running on account: ' + accountId);
-MWVScript.toast('Hello from ' + accountId);
-
-// ファイル読み書き
-MWVScript.writeFile('data/result.json', JSON.stringify({status: 'ok'}));
-const saved = MWVScript.readFile('data/result.json');
-
-// タブ間通信
-MWVScript.postToAccount('2', JSON.stringify({action: 'attack'}));
-const msgs = JSON.parse(MWVScript.pollMessages());
-```
-
-## スクリプト配置場所
+## ファイル構成
 
 ```
-/sdcard/Android/data/com.mwvscript.app/files/
-└── scripts/
-    ├── tora-engine.js
-    └── another-script.js
+app/src/main/java/com/mwvscript/app/
+├── MainActivity.kt         ターミナル画面
+├── ScriptEngineService.kt  Rhinoエンジン常駐サービス
+├── WebViewActivity.kt      JS注入専用WebView
+└── BootReceiver.kt         再起動後自動起動
 ```
+
+---
+
+## スクリプトの配置場所
+
+### CD（デフォルト実行ディレクトリ）
+
+```
+/storage/emulated/0/Android/data/com.mwvscript.app/files/
+```
+
+ファイル名だけで実行できる基準ディレクトリ。
+
+### 拡張スクリプトディレクトリ
+
+```
+/storage/emulated/0/Download/MWV-Script/Script/
+```
+
+`init.rjs`から`load()`で参照することで、この階層以下を実行環境として利用可能。
+
+---
+
+## 起動時の自動実行
+
+CDに`init.rjs`を置くと、エンジン起動時に自動で読み込まれる。
+
+```
+/storage/emulated/0/Android/data/com.mwvscript.app/files/init.rjs
+```
+
+`init.rjs`の中身は自由に書き換え可能。例：
+
+```js
+// init.rjs
+var SCRIPT_DIR = "/storage/emulated/0/Download/MWV-Script/Script/";
+
+function loadScript(name) {
+    load(SCRIPT_DIR + name);
+}
+
+print("init.rjs 読み込み完了");
+```
+
+---
+
+## ターミナルの使い方
+
+| 入力 | 動作 |
+|------|------|
+| JS式をそのまま入力 | 即時評価・実行 |
+| `hoge.rjs` | CDから実行 |
+| `hoge.js` | CDから実行 |
+| `load("パス")` | フルパス・相対パス指定で実行 |
+
+---
+
+## ファイル種別
+
+| 拡張子 | 用途 |
+|--------|------|
+| `.rjs` | Rhino、Android API、デバイス操作 |
+| `.js` | WebView、DOM操作、JS注入 |
+
+---
+
+## 組み込み関数
+
+| 関数 | 動作 |
+|------|------|
+| `print(msg)` | ターミナルに出力 |
+| `popup(msg)` | Toast表示 |
+| `alert(msg)` | ダイアログ |
+| `prompt(msg)` | 入力ダイアログ |
+| `confirm(msg)` | 確認ダイアログ |
+| `setTimeout(fn, ms)` | 遅延実行 |
+| `setInterval(fn, ms)` | 繰り返し実行 |
+| `bThread(fn)` | バックグラウンドスレッド |
+| `runOnUIThread(fn)` | UIスレッド実行 |
+| `openWebView(url, js?)` | WebViewActivity起動 |
+| `load(path)` | ファイル読み込み・実行 |
+| `ctx` | Serviceインスタンス |
+
+---
+
+## 技術メモ
+
+- RhinoのContextはスレッドバインド → 各スレッドで`Context.enter()`が必要
+- `Packages.android.`からAndroid APIを直接呼び出し可能
+- CookieManagerも`.rjs`から操作可能
+
+---
 
 ## ビルド
 
-GitHub Actionsが自動でdebug APKをビルドします。
+GitHub Actionsが自動でdebug APKをビルド。  
 ActionsタブからAPKをダウンロードしてインストール。
 
-## 要件
+## 動作要件
 
 - Android 8.0 (API 26) 以上
-- インターネット権限
-- 通知権限（Foreground Service用）
