@@ -48,6 +48,25 @@ class ScriptEngineService : Service() {
             rhinoScope = scope
 
             injectBuiltins()
+
+            // init.rjs 自動実行
+            val baseDir = getExternalFilesDir(null)
+            val initFile = java.io.File(baseDir, "init.rjs")
+            if (initFile.exists()) {
+                try {
+                    val source = initFile.readText()
+                    val cx2 = RhinoContext.enter()
+                    cx2.optimizationLevel = -1
+                    cx2.evaluateString(scope, source, "init.rjs", 1, null)
+                    RhinoContext.exit()
+                    android.util.Log.d("MWVScript", "init.rjs 実行完了")
+                    (activityRef as? MainActivity)?.printLine("init.rjs 読み込み完了")
+                } catch (e: Exception) {
+                    android.util.Log.e("MWVScript", "init.rjs エラー: ${e.message}")
+                    (activityRef as? MainActivity)?.printLine("init.rjs エラー: ${e.message}")
+                }
+            }
+
             android.util.Log.d("MWVScript", "Rhinoエンジン初期化完了")
             (activityRef as? MainActivity)?.printLine("Rhinoエンジン起動完了")
 
