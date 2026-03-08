@@ -90,8 +90,6 @@ print("init.rjs: " + "${initFile.absolutePath}");
         val cx = rhinoContext ?: return
         val scope = rhinoScope ?: return
         val mainHandler = Handler(Looper.getMainLooper())
-        val activity get() = activityRef
-
         // print → ターミナルに出力
         ScriptableObject.putProperty(scope, "print", object : BaseFunction() {
             override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
