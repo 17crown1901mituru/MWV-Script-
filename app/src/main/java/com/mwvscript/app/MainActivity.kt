@@ -94,11 +94,25 @@ class MainActivity : AppCompatActivity() {
             try {
                 val cx = org.mozilla.javascript.Context.enter()
                 cx.optimizationLevel = -1
-                val result = cx.evaluateString(scope, input, "<terminal>", 1, null)
+
+                // .rjs/.jsで終わる入力はCDからファイルとして実行
+                val result = if (input.endsWith(".rjs") || input.endsWith(".js")) {
+                    val file = java.io.File(getExternalFilesDir(null), input)
+                    if (!file.exists()) {
+                        printLine("エラー: ファイルが見つかりません: ${file.absolutePath}")
+                        org.mozilla.javascript.Context.exit()
+                        return@Thread
+                    }
+                    cx.evaluateString(scope, file.readText(), file.name, 1, null)
+                } else {
+                    cx.evaluateString(scope, input, "<terminal>", 1, null)
+                }
+
                 org.mozilla.javascript.Context.exit()
                 val str = org.mozilla.javascript.Context.toString(result)
                 if (str != "undefined") printLine(str)
             } catch (e: Exception) {
+                try { org.mozilla.javascript.Context.exit() } catch (_: Exception) {}
                 printLine("エラー: ${e.message}")
             }
         }.start()
