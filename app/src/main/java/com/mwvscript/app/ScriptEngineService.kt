@@ -269,6 +269,9 @@ class ScriptEngineService : Service() {
 
         // ctx
         ScriptableObject.putProperty(scope, "ctx", this)
+
+        // AccessibilityServiceが既に接続済みなら後からブリッジを注入
+        MWVAccessibilityService.instance?.injectAccessibilityBridge()
     }
 
     fun evaluateRhino(script: String): String {
