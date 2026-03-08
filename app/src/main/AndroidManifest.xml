@@ -71,6 +71,11 @@
             </intent-filter>
         </receiver>
 
+        <activity
+            android:name=".WebViewActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
     </application>
 
 </manifest>
