@@ -35,13 +35,6 @@ app/src/main/java/com/mwvscript/app/
 
 ファイル名だけで実行できる基準ディレクトリ。
 
-### 拡張スクリプトディレクトリ
-
-```
-/storage/emulated/0/Download/MWV-Script/Script/
-```
-
-`init.rjs`から`load()`で参照することで、この階層以下を実行環境として利用可能。
 
 ---
 
