@@ -42,9 +42,6 @@ app/src/main/java/com/mwvscript/app/
 
 CDに`init.rjs`を置くと、エンジン起動時に自動で読み込まれる。
 
-```
-/storage/emulated/0/Android/data/com.mwvscript.app/files/init.rjs
-```
 
 `init.rjs`の中身は自由に書き換え可能。例：
 
