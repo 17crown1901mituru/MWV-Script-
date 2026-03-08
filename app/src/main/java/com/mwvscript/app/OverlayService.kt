@@ -42,7 +42,12 @@ class OverlayService : Service() {
         instance = this
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
-        startForeground(NOTIF_ID, buildNotification())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIF_ID, buildNotification(),
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(NOTIF_ID, buildNotification())
+        }
         injectOverlayBridge()
     }
 
