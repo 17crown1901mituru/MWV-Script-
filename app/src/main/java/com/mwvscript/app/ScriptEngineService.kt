@@ -60,19 +60,19 @@ class ScriptEngineService : Service() {
                     cx2.evaluateString(scope, source, "init.rjs", 1, null)
                     RhinoContext.exit()
                     android.util.Log.d("MWVScript", "init.rjs 実行完了")
-                    (activityRef as? MainActivity)?.printLine("init.rjs 読み込み完了")
+                    OverlayService.instance?.appendOutput("init.rjs 読み込み完了")
                 } catch (e: Exception) {
                     android.util.Log.e("MWVScript", "init.rjs エラー: ${e.message}")
-                    (activityRef as? MainActivity)?.printLine("init.rjs エラー: ${e.message}")
+                    OverlayService.instance?.appendOutput("init.rjs エラー: ${e.message}")
                 }
             }
 
             android.util.Log.d("MWVScript", "Rhinoエンジン初期化完了")
-            (activityRef as? MainActivity)?.printLine("Rhinoエンジン起動完了")
+            OverlayService.instance?.appendOutput("Rhinoエンジン起動完了")
 
         } catch (e: Exception) {
             android.util.Log.e("MWVScript", "Rhino初期化失敗: ${e.message}")
-            (activityRef as? MainActivity)?.printLine("Rhinoエラー: ${e.message}")
+            OverlayService.instance?.appendOutput("Rhinoエラー: ${e.message}")
         }
     }
 
@@ -85,7 +85,7 @@ class ScriptEngineService : Service() {
             override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
                 val msg = args.joinToString(" ") { RhinoContext.toString(it) }
                 android.util.Log.d("MWVScript", msg)
-                (activityRef as? MainActivity)?.printLine(msg)
+                OverlayService.instance?.appendOutput(msg)
                 return RhinoContext.getUndefinedValue()
             }
         })
@@ -250,7 +250,7 @@ class ScriptEngineService : Service() {
                 val file = if (java.io.File(path).isAbsolute) java.io.File(path)
                            else java.io.File(baseDir, path)
                 if (!file.exists()) {
-                    (activityRef as? MainActivity)?.printLine("エラー: ファイルが見つかりません: ${file.absolutePath}")
+                    OverlayService.instance?.appendOutput("エラー: ファイルが見つかりません: ${file.absolutePath}")
                     return RhinoContext.getUndefinedValue()
                 }
                 return try {
@@ -261,7 +261,7 @@ class ScriptEngineService : Service() {
                     RhinoContext.exit()
                     result
                 } catch (e: Exception) {
-                    (activityRef as? MainActivity)?.printLine("エラー [${file.name}]: ${e.message}")
+                    OverlayService.instance?.appendOutput("エラー [${file.name}]: ${e.message}")
                     RhinoContext.getUndefinedValue()
                 }
             }
