@@ -78,6 +78,7 @@
 
         <service
             android:name=".OverlayService"
+            android:foregroundServiceType="dataSync"
             android:exported="false" />
 
         <service
