@@ -272,6 +272,11 @@ class ScriptEngineService : Service() {
 
         // AccessibilityServiceが既に接続済みなら後からブリッジを注入
         MWVAccessibilityService.instance?.injectAccessibilityBridge()
+
+        // OverlayServiceが既に起動済みなら後からブリッジを注入
+        OverlayService.instance?.let {
+            it.injectOverlayBridge()
+        }
     }
 
     fun evaluateRhino(script: String): String {
