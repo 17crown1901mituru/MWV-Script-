@@ -257,10 +257,12 @@ print("init.rjs: " + "${initFile.absolutePath}");
     }
 
     fun evaluateRhino(script: String): String {
-        val cx = rhinoContext ?: return "Error: 未起動"
         val scope = rhinoScope ?: return "Error: 未初期化"
         return try {
+            val cx = RhinoContext.enter()
+            cx.optimizationLevel = -1
             val result = cx.evaluateString(scope, script, "<eval>", 1, null)
+            RhinoContext.exit()
             RhinoContext.toString(result)
         } catch (e: Exception) {
             "Error: ${e.message}"
