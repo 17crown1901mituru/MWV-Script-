@@ -49,40 +49,11 @@ class ScriptEngineService : Service() {
 
             injectBuiltins()
             android.util.Log.d("MWVScript", "Rhinoエンジン初期化完了")
-
-            // init.rjsを自動実行
-            runInitScript()
+            (activityRef as? MainActivity)?.printLine("Rhinoエンジン起動完了")
 
         } catch (e: Exception) {
             android.util.Log.e("MWVScript", "Rhino初期化失敗: ${e.message}")
             (activityRef as? MainActivity)?.printLine("Rhinoエラー: ${e.message}")
-        }
-    }
-
-    private fun runInitScript() {
-        val initFile = java.io.File(getExternalFilesDir(null), "init.rjs")
-        if (!initFile.exists()) {
-            // init.rjsがなければデフォルトを生成
-            initFile.writeText("""
-// MWV Script init.rjs
-// このファイルはアプリ起動時に自動実行されます
-// ここに読み込みたいScriptのパスを記述してください
-
-print("MWV Script 起動完了");
-print("init.rjs: " + "${initFile.absolutePath}");
-            """.trimIndent())
-            (activityRef as? MainActivity)?.printLine("init.rjs を作成しました")
-            (activityRef as? MainActivity)?.printLine(initFile.absolutePath)
-        }
-
-        try {
-            val cx = rhinoContext ?: return
-            val scope = rhinoScope ?: return
-            val source = initFile.readText()
-            cx.evaluateString(scope, source, "init.rjs", 1, null)
-        } catch (e: Exception) {
-            android.util.Log.e("MWVScript", "init.rjs エラー: ${e.message}")
-            (activityRef as? MainActivity)?.printLine("init.rjsエラー: ${e.message}")
         }
     }
 
@@ -249,6 +220,31 @@ print("init.rjs: " + "${initFile.absolutePath}");
                     startActivity(intent)
                 }
                 return RhinoContext.getUndefinedValue()
+            }
+        })
+
+        // load(path) → ファイルを読み込んで実行（ファイル名だけでもCD基準で解決）
+        val baseDir = getExternalFilesDir(null)
+        ScriptableObject.putProperty(scope, "load", object : BaseFunction() {
+            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
+                val path = RhinoContext.toString(args.getOrNull(0))
+                val file = if (java.io.File(path).isAbsolute) java.io.File(path)
+                           else java.io.File(baseDir, path)
+                if (!file.exists()) {
+                    (activityRef as? MainActivity)?.printLine("エラー: ファイルが見つかりません: ${file.absolutePath}")
+                    return RhinoContext.getUndefinedValue()
+                }
+                return try {
+                    val source = file.readText()
+                    val cx2 = RhinoContext.enter()
+                    cx2.optimizationLevel = -1
+                    val result = cx2.evaluateString(scope, source, file.name, 1, null)
+                    RhinoContext.exit()
+                    result
+                } catch (e: Exception) {
+                    (activityRef as? MainActivity)?.printLine("エラー [${file.name}]: ${e.message}")
+                    RhinoContext.getUndefinedValue()
+                }
             }
         })
 
