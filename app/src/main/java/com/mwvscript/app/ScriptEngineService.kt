@@ -1,17 +1,11 @@
 package com.mwvscript.app
 
 import android.app.*
-import android.content.Context
 import android.content.Intent
 import android.os.*
-import android.webkit.WebView
 import androidx.core.app.NotificationCompat
 import com.faendir.rhino_android.RhinoAndroidHelper
-import org.mozilla.javascript.BaseFunction
-import org.mozilla.javascript.ImporterTopLevel
-import org.mozilla.javascript.NativeArray
-import org.mozilla.javascript.Scriptable
-import org.mozilla.javascript.ScriptableObject
+import org.mozilla.javascript.*
 import org.mozilla.javascript.Context as RhinoContext
 
 class ScriptEngineService : Service() {
@@ -26,15 +20,12 @@ class ScriptEngineService : Service() {
         var activityRef: Activity? = null
     }
 
-    private var engineWebView: WebView? = null
-
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(NOTIF_ID, buildNotification("エンジン起動中..."))
+        startForeground(NOTIF_ID, buildNotification("MWV Script 実行中"))
         isRunning = true
-        initRhino()
-        initEngineWebView()
+        Thread { initRhino() }.start()
     }
 
     private fun initRhino() {
@@ -44,6 +35,7 @@ class ScriptEngineService : Service() {
             cx.optimizationLevel = -1
             val scope = ImporterTopLevel(cx)
 
+            // パッケージエイリアス
             cx.evaluateString(scope, """
                 var android = Packages.android;
                 var java    = Packages.java;
@@ -55,39 +47,67 @@ class ScriptEngineService : Service() {
             rhinoContext = cx
             rhinoScope = scope
 
-            injectActivityDependencies()
+            injectBuiltins()
             android.util.Log.d("MWVScript", "Rhinoエンジン初期化完了")
+
+            // init.rjsを自動実行
+            runInitScript()
+
         } catch (e: Exception) {
             android.util.Log.e("MWVScript", "Rhino初期化失敗: ${e.message}")
+            (activityRef as? MainActivity)?.printLine("Rhinoエラー: ${e.message}")
         }
     }
 
-    fun injectActivityDependencies() {
+    private fun runInitScript() {
+        val initFile = java.io.File(getExternalFilesDir(null), "init.rjs")
+        if (!initFile.exists()) {
+            // init.rjsがなければデフォルトを生成
+            initFile.writeText("""
+// MWV Script init.rjs
+// このファイルはアプリ起動時に自動実行されます
+// ここに読み込みたいScriptのパスを記述してください
+
+print("MWV Script 起動完了");
+print("init.rjs: " + "${initFile.absolutePath}");
+            """.trimIndent())
+            (activityRef as? MainActivity)?.printLine("init.rjs を作成しました")
+            (activityRef as? MainActivity)?.printLine(initFile.absolutePath)
+        }
+
+        try {
+            val cx = rhinoContext ?: return
+            val scope = rhinoScope ?: return
+            val source = initFile.readText()
+            cx.evaluateString(scope, source, "init.rjs", 1, null)
+        } catch (e: Exception) {
+            android.util.Log.e("MWVScript", "init.rjs エラー: ${e.message}")
+            (activityRef as? MainActivity)?.printLine("init.rjsエラー: ${e.message}")
+        }
+    }
+
+    private fun injectBuiltins() {
         val cx = rhinoContext ?: return
         val scope = rhinoScope ?: return
-        val activity = activityRef ?: return
         val mainHandler = Handler(Looper.getMainLooper())
+        val activity get() = activityRef
 
-        ScriptableObject.putProperty(scope, "ctx", activity)
-
-        val pkg = cx.newObject(scope) as ScriptableObject
-        ScriptableObject.putProperty(pkg, "Utils", MWVUtils(activity))
-        ScriptableObject.putProperty(scope, "pkg", pkg)
-
-        // print
+        // print → ターミナルに出力
         ScriptableObject.putProperty(scope, "print", object : BaseFunction() {
             override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                android.util.Log.d("MWVScript", args.joinToString(" ") { RhinoContext.toString(it) })
+                val msg = args.joinToString(" ") { RhinoContext.toString(it) }
+                android.util.Log.d("MWVScript", msg)
+                (activityRef as? MainActivity)?.printLine(msg)
                 return RhinoContext.getUndefinedValue()
             }
         })
 
-        // popup
+        // popup → Toast
         ScriptableObject.putProperty(scope, "popup", object : BaseFunction() {
             override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
                 val msg = RhinoContext.toString(args.getOrNull(0))
                 mainHandler.post {
-                    android.widget.Toast.makeText(activity, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(this@ScriptEngineService, msg, android.widget.Toast.LENGTH_SHORT).show()
                 }
                 return RhinoContext.getUndefinedValue()
             }
@@ -100,7 +120,7 @@ class ScriptEngineService : Service() {
                 val title = if (args.size > 1) RhinoContext.toString(args[1]) else "Alert"
                 val latch = java.util.concurrent.CountDownLatch(1)
                 mainHandler.post {
-                    android.app.AlertDialog.Builder(activity)
+                    android.app.AlertDialog.Builder(activityRef ?: return@post)
                         .setTitle(title).setMessage(msg)
                         .setPositiveButton("OK") { _, _ -> latch.countDown() }
                         .setOnDismissListener { latch.countDown() }
@@ -120,9 +140,9 @@ class ScriptEngineService : Service() {
                 var input: String? = null
                 val latch = java.util.concurrent.CountDownLatch(1)
                 mainHandler.post {
-                    val et = android.widget.EditText(activity)
+                    val et = android.widget.EditText(activityRef ?: return@post)
                     et.setText(default)
-                    android.app.AlertDialog.Builder(activity)
+                    android.app.AlertDialog.Builder(activityRef ?: return@post)
                         .setTitle(title).setMessage(msg).setView(et)
                         .setPositiveButton("OK") { _, _ -> input = et.text.toString(); latch.countDown() }
                         .setNegativeButton("Cancel") { _, _ -> latch.countDown() }
@@ -142,7 +162,7 @@ class ScriptEngineService : Service() {
                 var result = false
                 val latch = java.util.concurrent.CountDownLatch(1)
                 mainHandler.post {
-                    android.app.AlertDialog.Builder(activity)
+                    android.app.AlertDialog.Builder(activityRef ?: return@post)
                         .setTitle(title).setMessage(msg)
                         .setPositiveButton("OK") { _, _ -> result = true; latch.countDown() }
                         .setNegativeButton("Cancel") { _, _ -> latch.countDown() }
@@ -151,24 +171,6 @@ class ScriptEngineService : Service() {
                 }
                 latch.await()
                 return result
-            }
-        })
-
-        // select
-        ScriptableObject.putProperty(scope, "select", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val items = (args.getOrNull(0) as? NativeArray)
-                    ?.map { RhinoContext.toString(it) }?.toTypedArray() ?: return -1
-                var selected = -1
-                val latch = java.util.concurrent.CountDownLatch(1)
-                mainHandler.post {
-                    android.app.AlertDialog.Builder(activity)
-                        .setItems(items) { _, which -> selected = which; latch.countDown() }
-                        .setOnDismissListener { latch.countDown() }
-                        .show()
-                }
-                latch.await()
-                return selected
             }
         })
 
@@ -223,25 +225,6 @@ class ScriptEngineService : Service() {
             }
         })
 
-        // bTask
-        ScriptableObject.putProperty(scope, "bTask", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val bgFn = args.getOrNull(0) as? org.mozilla.javascript.Function ?: return RhinoContext.getUndefinedValue()
-                val afterFn = args.getOrNull(1) as? org.mozilla.javascript.Function
-                Thread {
-                    try { bgFn.call(cx, scope, scope, emptyArray()) }
-                    catch (e: Exception) { android.util.Log.e("MWVScript", "bTask bg: ${e.message}") }
-                    afterFn?.let { fn ->
-                        mainHandler.post {
-                            try { fn.call(cx, scope, scope, emptyArray()) }
-                            catch (e: Exception) { android.util.Log.e("MWVScript", "bTask after: ${e.message}") }
-                        }
-                    }
-                }.start()
-                return RhinoContext.getUndefinedValue()
-            }
-        })
-
         // runOnUIThread
         ScriptableObject.putProperty(scope, "runOnUIThread", object : BaseFunction() {
             override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
@@ -254,58 +237,42 @@ class ScriptEngineService : Service() {
             }
         })
 
-        // jsArray
-        ScriptableObject.putProperty(scope, "jsArray", object : BaseFunction() {
+        // openWebView(url, js?)
+        ScriptableObject.putProperty(scope, "openWebView", object : BaseFunction() {
             override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val arr = args.getOrNull(0)
-                return if (arr is Array<*>) cx.newArray(scope, arr) else cx.newArray(scope, emptyArray())
+                val url = RhinoContext.toString(args.getOrNull(0))
+                val js = if (args.size > 1) RhinoContext.toString(args[1]) else ""
+                mainHandler.post {
+                    val intent = Intent(this@ScriptEngineService, WebViewActivity::class.java).apply {
+                        putExtra("url", url)
+                        putExtra("js", js)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
+                }
+                return RhinoContext.getUndefinedValue()
             }
         })
+
+        // ctx
+        ScriptableObject.putProperty(scope, "ctx", this)
     }
 
     fun evaluateRhino(script: String): String {
-        val cx = rhinoContext ?: return "Error: Rhinoエンジン未起動"
-        val scope = rhinoScope ?: return "Error: Rhinoスコープ未初期化"
+        val cx = rhinoContext ?: return "Error: 未起動"
+        val scope = rhinoScope ?: return "Error: 未初期化"
         return try {
-            val result = cx.evaluateString(scope, script, "<mwv>", 1, null)
+            val result = cx.evaluateString(scope, script, "<eval>", 1, null)
             RhinoContext.toString(result)
         } catch (e: Exception) {
             "Error: ${e.message}"
         }
     }
 
-    fun callScriptFunction(name: String, vararg args: Any?) {
-        val cx = rhinoContext ?: return
-        val scope = rhinoScope ?: return
-        try {
-            val fn = scope.get(name, scope)
-            if (fn is org.mozilla.javascript.Function) fn.call(cx, scope, scope, args)
-        } catch (e: Exception) {
-            android.util.Log.e("MWVScript", "callScriptFunction($name): ${e.message}")
-        }
-    }
-
-    private fun initEngineWebView() {
-        engineWebView = WebView(this).apply {
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            addJavascriptInterface(ScriptBridge(this@ScriptEngineService, "engine"), "MWVScript")
-            loadDataWithBaseURL(null, "<html><body></body></html>", "text/html", "utf-8", null)
-        }
-    }
-
-    fun executeScript(js: String, callback: ((String) -> Unit)? = null) {
-        engineWebView?.evaluateJavascript(js) { result -> callback?.invoke(result ?: "") }
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        updateNotification("エンジン実行中")
-        return START_STICKY
-    }
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     override fun onDestroy() {
         isRunning = false
-        engineWebView?.destroy()
         try { rhinoContext?.let { RhinoContext.exit() } } catch (e: Exception) { }
         rhinoContext = null
         rhinoScope = null
@@ -315,9 +282,8 @@ class ScriptEngineService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(CHANNEL_ID, "MWV Script Engine",
+        val channel = NotificationChannel(CHANNEL_ID, "MWV Script",
             NotificationManager.IMPORTANCE_LOW).apply {
-            description = "バックグラウンドJSエンジン"
             setShowBadge(false)
         }
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
@@ -330,9 +296,5 @@ class ScriptEngineService : Service() {
             .setContentTitle("MWV Script").setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_manage)
             .setContentIntent(pi).setOngoing(true).build()
-    }
-
-    private fun updateNotification(text: String) {
-        getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(text))
     }
 }
