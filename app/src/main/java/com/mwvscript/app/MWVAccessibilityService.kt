@@ -115,7 +115,7 @@ class MWVAccessibilityService : AccessibilityService() {
     }
 
     // Rhinoスコープにブリッジを注入
-    private fun injectAccessibilityBridge() {
+    internal fun injectAccessibilityBridge() {
         val scope = ScriptEngineService.rhinoScope ?: return
         val service = this
 
