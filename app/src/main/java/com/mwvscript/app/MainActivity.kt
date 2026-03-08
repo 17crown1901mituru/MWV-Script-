@@ -3,13 +3,14 @@ package com.mwvscript.app
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
-import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.webkit.ProfileStore
+import androidx.webkit.WebViewCompat
 import com.google.gson.Gson
 import java.io.File
 
@@ -18,8 +19,7 @@ data class Tab(
     val label: String,
     val url: String,
     val accountId: String,
-    var webView: WebView? = null,
-    var cookieStore: String = "account_$accountId"
+    var webView: WebView? = null
 )
 
 class MainActivity : AppCompatActivity() {
@@ -57,7 +57,6 @@ class MainActivity : AppCompatActivity() {
             true
         }
 
-        // Load saved tabs or open default
         loadSavedTabs()
         if (tabs.isEmpty()) addTab("Account 1", "https://www.google.com", "1")
     }
@@ -115,7 +114,12 @@ class MainActivity : AppCompatActivity() {
     // ── WEBVIEW FACTORY ───────────────────────────────────────────────────────
 
     private fun createWebView(accountId: String): WebView {
-        val wv = WebView(this)
+        // アカウントIDごとに独立したProfileを作成 → クッキー完全分離
+        val profileStore = ProfileStore.getInstance()
+        val profileName = "account_$accountId"
+        val profile = profileStore.getOrCreateProfile(profileName)
+
+        val wv = WebViewCompat.createWebView(this, profile)
         wv.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -128,11 +132,6 @@ class MainActivity : AppCompatActivity() {
             useWideViewPort = true
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         }
-
-        // Isolated cookie store per account
-        val cookieManager = CookieManager.getInstance()
-        cookieManager.setAcceptCookie(true)
-        cookieManager.setAcceptThirdPartyCookies(wv, true)
 
         wv.addJavascriptInterface(ScriptBridge(this, accountId), "MWVScript")
 
@@ -222,12 +221,28 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(this, ScriptEngineService::class.java)
         if (ScriptEngineService.isRunning) {
             stopService(intent)
+            ScriptEngineService.activityRef = null
             btnService.setImageResource(android.R.drawable.ic_media_play)
             Toast.makeText(this, "エンジン停止", Toast.LENGTH_SHORT).show()
         } else {
+            ScriptEngineService.activityRef = this
             startForegroundService(intent)
             btnService.setImageResource(android.R.drawable.ic_media_pause)
             Toast.makeText(this, "エンジン起動", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Activityが前面に戻った時もactivityRefを更新
+        ScriptEngineService.activityRef = this
+        if (ScriptEngineService.isRunning) {
+            ScriptEngineService.rhinoScope?.let {
+                ScriptEngineService.rhinoContext?.let { cx ->
+                    val service = ScriptEngineService()
+                    service.injectActivityDependencies(cx, it)
+                }
+            }
         }
     }
 
