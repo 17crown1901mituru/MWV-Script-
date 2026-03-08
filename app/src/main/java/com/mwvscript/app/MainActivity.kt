@@ -145,12 +145,28 @@ class MainActivity : AppCompatActivity() {
         val scriptDir = File(getExternalFilesDir(null), "scripts")
         if (!scriptDir.exists()) return
 
-        scriptDir.listFiles { f -> f.extension == "js" }?.forEach { file ->
-            val meta = parseScriptMeta(file.readText())
+        scriptDir.listFiles { f -> f.extension == "js" || f.extension == "rjs" }?.forEach { file ->
+            val source = file.readText()
+            val meta = parseScriptMeta(source)
             val matchPattern = meta["@match"] ?: "*"
             if (urlMatchesPattern(url, matchPattern)) {
-                val js = file.readText()
-                webView.evaluateJavascript(js, null)
+                if (file.extension == "rjs") {
+                    // Rhino経由で実行
+                    Thread {
+                        ScriptEngineService.rhinoContext?.let { cx ->
+                            ScriptEngineService.rhinoScope?.let { scope ->
+                                try {
+                                    cx.evaluateString(scope, source, file.name, 1, null)
+                                } catch (e: Exception) {
+                                    android.util.Log.e("MWVScript", "rjs error [${file.name}]: ${e.message}")
+                                }
+                            }
+                        }
+                    }.start()
+                } else {
+                    // WebView（V8）で実行
+                    webView.evaluateJavascript(source, null)
+                }
             }
         }
     }
@@ -196,7 +212,7 @@ class MainActivity : AppCompatActivity() {
     private fun showScriptManager() {
         val scriptDir = File(getExternalFilesDir(null), "scripts")
         scriptDir.mkdirs()
-        val files = scriptDir.listFiles { f -> f.extension == "js" }
+        val files = scriptDir.listFiles { f -> f.extension == "js" || f.extension == "rjs" }
             ?.map { it.name }?.toTypedArray() ?: arrayOf()
 
         val msg = if (files.isEmpty())
