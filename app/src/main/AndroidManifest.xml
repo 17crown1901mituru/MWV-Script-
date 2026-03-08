@@ -77,6 +77,11 @@
             android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <service
+            android:name=".OverlayService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false" />
+
+        <service
             android:name=".MWVAccessibilityService"
             android:exported="true"
             android:label="MWV Script Accessibility"
