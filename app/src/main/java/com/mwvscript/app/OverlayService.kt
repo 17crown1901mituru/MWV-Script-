@@ -36,6 +36,7 @@ class OverlayService : Service() {
     // WebView（INVISIBLEのままWindowManagerに保持）
     private var webView: WebView? = null
     private var webViewShowing = false
+    private var currentSessionId = "default"
 
     // オーバーレイターミナル用
     private lateinit var terminalContainer: LinearLayout
@@ -154,6 +155,43 @@ class OverlayService : Service() {
         }
         isShowing = false
         updateNotification()
+    }
+
+    // ======================================================
+    // Cookie セッション管理
+    // ======================================================
+
+    private fun saveCookies(sessionId: String, url: String) {
+        val cookieManager = android.webkit.CookieManager.getInstance()
+        val cookies = cookieManager.getCookie(url) ?: return
+        getSharedPreferences("mwv_cookies", Context.MODE_PRIVATE)
+            .edit()
+            .putString("cookie_$sessionId", cookies)
+            .putString("url_$sessionId", url)
+            .apply()
+    }
+
+    private fun restoreCookies(sessionId: String) {
+        val prefs = getSharedPreferences("mwv_cookies", Context.MODE_PRIVATE)
+        val cookies = prefs.getString("cookie_$sessionId", null) ?: return
+        val url = prefs.getString("url_$sessionId", null) ?: return
+        val cookieManager = android.webkit.CookieManager.getInstance()
+        cookieManager.removeAllCookies(null)
+        cookies.split(";").map { it.trim() }.filter { it.isNotEmpty() }.forEach { cookie ->
+            cookieManager.setCookie(url, cookie)
+        }
+        cookieManager.flush()
+    }
+
+    private fun switchSession(newSessionId: String, url: String) {
+        // 現在のセッションのCookieを保存
+        val currentUrl = getSharedPreferences("mwv_cookies", Context.MODE_PRIVATE)
+            .getString("url_$currentSessionId", null)
+        if (currentUrl != null) saveCookies(currentSessionId, currentUrl)
+
+        // 新しいセッションのCookieを復元
+        currentSessionId = newSessionId
+        restoreCookies(newSessionId)
     }
 
     private fun getScreenHeight(): Int {
@@ -367,12 +405,16 @@ class OverlayService : Service() {
         ScriptableObject.putProperty(web, "open", object : org.mozilla.javascript.BaseFunction() {
             override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
                 val url = args.getOrNull(0)?.let { org.mozilla.javascript.Context.toString(it) } ?: return null
+                val sessionId = args.getOrNull(1)?.let { org.mozilla.javascript.Context.toString(it) } ?: "default"
                 mainHandler.post {
+                    // セッション切り替え（Cookie保存→復元）
+                    if (sessionId != currentSessionId) {
+                        switchSession(sessionId, url)
+                    }
                     webView?.let {
                         it.loadUrl(url)
                         it.visibility = View.VISIBLE
                         webViewShowing = true
-                        // WebView表示中はFOCUSABLEに更新
                         val params = (it.layoutParams as WindowManager.LayoutParams).apply {
                             flags = flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
                         }
@@ -387,6 +429,9 @@ class OverlayService : Service() {
             override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
                 mainHandler.post {
                     webView?.let {
+                        // 現在のURLのCookieを保存
+                        val currentUrl = it.url
+                        if (currentUrl != null) saveCookies(currentSessionId, currentUrl)
                         it.visibility = View.INVISIBLE
                         webViewShowing = false
                         val params = (it.layoutParams as WindowManager.LayoutParams).apply {
