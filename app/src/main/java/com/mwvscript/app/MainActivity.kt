@@ -46,6 +46,7 @@ class MainActivity : AppCompatActivity() {
 
         ScriptEngineService.activityRef = this
         startForegroundService(Intent(this, ScriptEngineService::class.java))
+        startForegroundService(Intent(this, OverlayService::class.java))
 
         appendOutput("MWV Script Terminal v2.0")
         appendOutput("")
