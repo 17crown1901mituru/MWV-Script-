@@ -1,21 +1,21 @@
 package com.mwvscript.app
 
 import android.app.Activity
-import android.content.Intent
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.view.KeyEvent
-import android.view.inputmethod.EditorInfo
+import android.content.*
+import android.os.*
+import android.view.*
+import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import kotlin.system.exitProcess
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var tvOutput: TextView
-    private lateinit var etInput: EditText
     private lateinit var scrollView: ScrollView
-    val mainHandler = Handler(Looper.getMainLooper())
+    private lateinit var terminalContainer: LinearLayout
+    private lateinit var activeInput: EditText
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val inputHistory = mutableListOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -25,82 +25,108 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(android.graphics.Color.BLACK)
         }
 
-        tvOutput = TextView(this).apply {
-            setTextColor(android.graphics.Color.GREEN)
-            textSize = 12f
-            typeface = android.graphics.Typeface.MONOSPACE
+        // ターミナル本体（出力+入力が一体化）
+        terminalContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             setPadding(16, 16, 16, 16)
         }
 
         scrollView = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-            addView(tvOutput)
+            addView(terminalContainer)
         }
 
-        etInput = EditText(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT)
-            setTextColor(android.graphics.Color.WHITE)
-            setHintTextColor(android.graphics.Color.GRAY)
-            hint = "> "
-            textSize = 12f
-            typeface = android.graphics.Typeface.MONOSPACE
-            setBackgroundColor(android.graphics.Color.parseColor("#111111"))
-            setPadding(16, 12, 16, 12)
-            imeOptions = EditorInfo.IME_ACTION_SEND
-            inputType = android.text.InputType.TYPE_CLASS_TEXT
-        }
+        // エクストラキーボード
+        val extraKeyboard = buildExtraKeyboard()
 
         root.addView(scrollView)
-        root.addView(etInput)
+        root.addView(extraKeyboard)
         setContentView(root)
 
         ScriptEngineService.activityRef = this
         startForegroundService(Intent(this, ScriptEngineService::class.java))
 
-        etInput.setOnEditorActionListener { _, actionId, event ->
-            if (actionId == EditorInfo.IME_ACTION_SEND ||
-                (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)) {
-                val input = etInput.text.toString().trim()
-                if (input.isNotEmpty()) {
-                    printLine("> $input")
-                    etInput.setText("")
-                    handleInput(input)
-                }
-                true
-            } else false
-        }
-
-        printLine("MWV Script Terminal v1.0")
-        printLine("")
+        appendOutput("MWV Script Terminal v2.0")
+        appendOutput("")
+        addNewInput()
     }
 
-    fun printLine(text: String) {
+    // 出力テキストを追加
+    fun appendOutput(text: String) {
         mainHandler.post {
-            tvOutput.append("$text\n")
-            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+            val tv = TextView(this).apply {
+                setTextColor(android.graphics.Color.GREEN)
+                textSize = 12f
+                typeface = android.graphics.Typeface.MONOSPACE
+                this.text = text
+            }
+            terminalContainer.addView(tv)
+            scrollToBottom()
         }
     }
 
-    private fun handleInput(input: String) {
+    // 新しい入力欄を追加
+    private fun addNewInput() {
+        mainHandler.post {
+            activeInput = EditText(this).apply {
+                setTextColor(android.graphics.Color.WHITE)
+                textSize = 12f
+                typeface = android.graphics.Typeface.MONOSPACE
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                setPadding(0, 4, 0, 4)
+                hint = "> "
+                setHintTextColor(android.graphics.Color.GRAY)
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                        android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_ENTER_ACTION
+                isSingleLine = false
+                minLines = 1
+            }
+            terminalContainer.addView(activeInput)
+            activeInput.requestFocus()
+            scrollToBottom()
+        }
+    }
+
+    // RUNボタン実行
+    private fun runInput() {
+        val input = activeInput.text.toString().trim()
+        if (input.isEmpty()) return
+
+        inputHistory.add(input)
+
+        // 入力欄を読み取り専用テキストに変換
+        mainHandler.post {
+            val inputText = activeInput.text.toString()
+            terminalContainer.removeView(activeInput)
+            val tv = TextView(this).apply {
+                setTextColor(android.graphics.Color.CYAN)
+                textSize = 12f
+                typeface = android.graphics.Typeface.MONOSPACE
+                text = "> $inputText"
+            }
+            terminalContainer.addView(tv)
+        }
+
         Thread {
             val scope = ScriptEngineService.rhinoScope
             if (scope == null) {
-                printLine("エラー: Rhinoエンジン未起動")
+                appendOutput("エラー: Rhinoエンジン未起動")
+                addNewInput()
                 return@Thread
             }
             try {
                 val cx = org.mozilla.javascript.Context.enter()
                 cx.optimizationLevel = -1
 
-                // .rjs/.jsで終わる入力はCDからファイルとして実行
                 val result = if (input.endsWith(".rjs") || input.endsWith(".js")) {
                     val file = java.io.File(getExternalFilesDir(null), input)
                     if (!file.exists()) {
-                        printLine("エラー: ファイルが見つかりません: ${file.absolutePath}")
+                        appendOutput("エラー: ファイルが見つかりません: ${file.absolutePath}")
                         org.mozilla.javascript.Context.exit()
+                        addNewInput()
                         return@Thread
                     }
                     cx.evaluateString(scope, file.readText(), file.name, 1, null)
@@ -110,12 +136,118 @@ class MainActivity : AppCompatActivity() {
 
                 org.mozilla.javascript.Context.exit()
                 val str = org.mozilla.javascript.Context.toString(result)
-                if (str != "undefined") printLine(str)
+                if (str != "undefined") appendOutput(str)
             } catch (e: Exception) {
                 try { org.mozilla.javascript.Context.exit() } catch (_: Exception) {}
-                printLine("エラー: ${e.message}")
+                appendOutput("エラー: ${e.message}")
             }
+            addNewInput()
         }.start()
+    }
+
+    // printLine（ScriptEngineServiceから呼ばれる）
+    fun printLine(text: String) {
+        appendOutput(text)
+    }
+
+    private fun scrollToBottom() {
+        scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+    }
+
+    // エクストラキーボード構築
+    private fun buildExtraKeyboard(): LinearLayout {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(android.graphics.Color.parseColor("#111111"))
+        }
+
+        // 記号行
+        val symbolRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(4, 4, 4, 0)
+        }
+        listOf("()", "\"", "'", ";", ".", "/").forEach { symbol ->
+            symbolRow.addView(extraKey(symbol) {
+                val pos = activeInput.selectionStart
+                activeInput.text.insert(pos, symbol)
+            })
+        }
+        container.addView(symbolRow)
+
+        // 操作行
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(4, 4, 4, 4)
+        }
+
+        // RUN
+        actionRow.addView(extraKey("RUN", android.graphics.Color.parseColor("#005500")) {
+            runInput()
+        })
+
+        // PASTE
+        actionRow.addView(extraKey("PASTE") {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val text = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: return@extraKey
+            val pos = activeInput.selectionStart
+            activeInput.text.insert(pos, text)
+        })
+
+        // COPY
+        actionRow.addView(extraKey("COPY") {
+            val selected = activeInput.text.substring(
+                activeInput.selectionStart.coerceAtLeast(0),
+                activeInput.selectionEnd.coerceAtLeast(0)
+            )
+            if (selected.isNotEmpty()) {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("copied", selected))
+                appendOutput("コピーしました")
+            }
+        })
+
+        // KB（ソフトウェアキーボードトグル）
+        actionRow.addView(extraKey("KB") {
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+            if (currentFocus != null) {
+                imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
+            }
+        })
+
+        // RESET（スコープリセット）
+        actionRow.addView(extraKey("RESET", android.graphics.Color.parseColor("#553300")) {
+            ScriptEngineService.rhinoScope = null
+            ScriptEngineService.rhinoContext = null
+            appendOutput("スコープをリセットしました。再起動してください。")
+        })
+
+        // EXIT（完全終了）
+        actionRow.addView(extraKey("EXIT", android.graphics.Color.parseColor("#550000")) {
+            stopService(Intent(this, ScriptEngineService::class.java))
+            finishAffinity()
+            exitProcess(0)
+        })
+
+        container.addView(actionRow)
+        return container
+    }
+
+    private fun extraKey(
+        label: String,
+        bgColor: Int = android.graphics.Color.parseColor("#222222"),
+        onClick: () -> Unit
+    ): Button {
+        return Button(this).apply {
+            text = label
+            textSize = 11f
+            setTextColor(android.graphics.Color.WHITE)
+            setBackgroundColor(bgColor)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                setMargins(2, 2, 2, 2)
+            }
+            setPadding(4, 8, 4, 8)
+            setOnClickListener { onClick() }
+        }
     }
 
     override fun onResume() {
