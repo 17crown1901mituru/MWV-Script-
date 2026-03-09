@@ -6,8 +6,7 @@ import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.*
 import android.view.*
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.core.app.NotificationCompat
 import org.mozilla.javascript.ScriptableObject
@@ -19,7 +18,6 @@ class OverlayService : Service() {
         const val CHANNEL_ID = "mwv_overlay"
         const val NOTIF_ID = 1002
         const val ACTION_TOGGLE = "com.mwvscript.app.OVERLAY_TOGGLE"
-        const val ACTION_EXIT = "com.mwvscript.app.APP_EXIT"
 
         fun toggle(context: Context) {
             val intent = Intent(context, OverlayService::class.java).apply {
@@ -31,14 +29,8 @@ class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var overlayView: View? = null
-    private var overlayParams: WindowManager.LayoutParams? = null
     private var isShowing = false
     private val mainHandler = Handler(Looper.getMainLooper())
-
-    // WebView（INVISIBLEのままWindowManagerに保持）
-    private var webView: WebView? = null
-    private var webViewShowing = false
-    private var currentSessionId = "default"
 
     // オーバーレイターミナル用
     private lateinit var terminalContainer: LinearLayout
@@ -57,54 +49,17 @@ class OverlayService : Service() {
             startForeground(NOTIF_ID, buildNotification())
         }
         injectOverlayBridge()
-        initWebView()
-    }
-
-    private fun initWebView() {
-        mainHandler.post {
-            val wv = WebView(this).apply {
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.databaseEnabled = true
-                webViewClient = WebViewClient()
-                visibility = View.INVISIBLE
-            }
-            val params = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                PixelFormat.TRANSLUCENT
-            )
-            try {
-                windowManager.addView(wv, params)
-                webView = wv
-            } catch (e: Exception) {
-                android.util.Log.e("MWVScript", "WebView初期化失敗: ${e.message}")
-            }
-        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_TOGGLE) {
             if (isShowing) hideOverlay() else showOverlay()
         }
-        if (intent?.action == ACTION_EXIT) {
-            hideOverlay()
-            stopSelf()
-            android.os.Process.killProcess(android.os.Process.myPid())
-        }
         return START_STICKY
     }
 
     override fun onDestroy() {
         hideOverlay()
-        webView?.let {
-            try { windowManager.removeView(it) } catch (e: Exception) {}
-            it.destroy()
-            webView = null
-        }
         instance = null
         super.onDestroy()
     }
@@ -129,10 +84,9 @@ class OverlayService : Service() {
         val view = buildOverlayView()
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            getScreenHeight() / 2,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -141,66 +95,28 @@ class OverlayService : Service() {
 
         windowManager.addView(view, params)
         overlayView = view
-        overlayParams = params
         isShowing = true
         updateNotification()
 
-        // 入力欄タップ時にフォーカスを有効化
-        activeInput.setOnTouchListener { _, _ ->
-            val lp = params.apply {
-                flags = flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
-            }
-            windowManager.updateViewLayout(view, lp)
-            activeInput.requestFocus()
-            false
-        }
+        // フォーカスを有効にして入力できるようにする
+        mainHandler.postDelayed({
+            try {
+                val lp = params.apply {
+                    flags = flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+                }
+                windowManager.updateViewLayout(view, lp)
+                activeInput.requestFocus()
+            } catch (e: Exception) { }
+        }, 100)
     }
 
     private fun hideOverlay() {
         overlayView?.let {
             try { windowManager.removeView(it) } catch (e: Exception) { }
             overlayView = null
-            overlayParams = null
         }
         isShowing = false
         updateNotification()
-    }
-
-    // ======================================================
-    // Cookie セッション管理
-    // ======================================================
-
-    private fun saveCookies(sessionId: String, url: String) {
-        val cookieManager = android.webkit.CookieManager.getInstance()
-        val cookies = cookieManager.getCookie(url) ?: return
-        getSharedPreferences("mwv_cookies", Context.MODE_PRIVATE)
-            .edit()
-            .putString("cookie_$sessionId", cookies)
-            .putString("url_$sessionId", url)
-            .apply()
-    }
-
-    private fun restoreCookies(sessionId: String) {
-        val prefs = getSharedPreferences("mwv_cookies", Context.MODE_PRIVATE)
-        val cookies = prefs.getString("cookie_$sessionId", null) ?: return
-        val url = prefs.getString("url_$sessionId", null) ?: return
-        val cookieManager = android.webkit.CookieManager.getInstance()
-        cookieManager.removeAllCookies(null)
-        cookies.split(";").map { it.trim() }.filter { it.isNotEmpty() }.forEach { cookie ->
-            cookieManager.setCookie(url, cookie)
-        }
-        cookieManager.flush()
-    }
-
-    private fun switchSession(newSessionId: String, url: String) {
-        // 現在のセッションのCookieを保存
-        val currentUrl = getSharedPreferences("mwv_cookies", Context.MODE_PRIVATE)
-            .getString("url_$currentSessionId", null)
-        if (currentUrl != null) saveCookies(currentSessionId, currentUrl)
-
-        // 新しいセッションのCookieを復元
-        currentSessionId = newSessionId
-        restoreCookies(newSessionId)
     }
 
     private fun getScreenHeight(): Int {
@@ -218,202 +134,157 @@ class OverlayService : Service() {
     // オーバーレイUI構築
     // ======================================================
 
-    // 履歴パネル表示状態
-    private var historyExpanded = false
-    private var historyPanel: LinearLayout? = null
-    private val outputHistory = mutableListOf<String>()
-    private var isShiftOn = false
-
     private fun buildOverlayView(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(android.graphics.Color.parseColor("#EE000000"))
+            setBackgroundColor(android.graphics.Color.parseColor("#DD000000"))
         }
 
-        // ── ヘッダー ──────────────────────────────
+        // ヘッダーバー
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(android.graphics.Color.parseColor("#1a1a1a"))
-            setPadding(12, 4, 4, 4)
+            setPadding(16, 8, 8, 8)
         }
+
         val title = TextView(this).apply {
-            text = "MWV"
+            text = "MWV Terminal"
             setTextColor(android.graphics.Color.GREEN)
-            textSize = 11f
+            textSize = 12f
             typeface = android.graphics.Typeface.MONOSPACE
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-        val histBtn = termKey("LOG") { toggleHistory() }
-        val closeBtn = termKey("✕", android.graphics.Color.parseColor("#550000")) { hideOverlay() }
+
+        val closeBtn = Button(this).apply {
+            text = "✕"
+            textSize = 11f
+            setTextColor(android.graphics.Color.WHITE)
+            setBackgroundColor(android.graphics.Color.parseColor("#550000"))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(4, 0, 4, 0)
+            }
+            setPadding(16, 4, 16, 4)
+            setOnClickListener { hideOverlay() }
+        }
+
         header.addView(title)
-        header.addView(histBtn)
         header.addView(closeBtn)
 
-        // ── 履歴パネル（折りたたみ） ────────────────
-        val hPanel = LinearLayout(this).apply {
+        // ターミナル本体
+        val termBody = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            visibility = android.view.View.GONE
-            setBackgroundColor(android.graphics.Color.parseColor("#CC111111"))
+            setPadding(12, 8, 12, 8)
         }
-        val hScroll = ScrollView(this).apply {
+        terminalContainer = termBody
+
+        scrollView = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 160)
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+            addView(terminalContainer)
         }
-        terminalContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(12, 4, 12, 4)
-        }
-        hScroll.addView(terminalContainer)
-        hPanel.addView(hScroll)
-        historyPanel = hPanel
-        scrollView = hScroll
 
-        // ── 最新出力2行 ───────────────────────────
-        val recentArea = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(12, 4, 12, 2)
-            setBackgroundColor(android.graphics.Color.parseColor("#CC000000"))
-        }
-        recentLine1 = TextView(this).apply {
-            setTextColor(android.graphics.Color.parseColor("#888888"))
-            textSize = 11f
-            typeface = android.graphics.Typeface.MONOSPACE
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.START
-            text = ""
-        }
-        recentLine2 = TextView(this).apply {
-            setTextColor(android.graphics.Color.GREEN)
-            textSize = 11f
-            typeface = android.graphics.Typeface.MONOSPACE
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.START
-            text = ""
-        }
-        recentArea.addView(recentLine1)
-        recentArea.addView(recentLine2)
-
-        // ── 入力欄 ────────────────────────────────
-        val inputRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(android.graphics.Color.parseColor("#1a1a1a"))
-            setPadding(8, 2, 8, 2)
-        }
+        // 入力欄
         activeInput = EditText(this).apply {
             setTextColor(android.graphics.Color.WHITE)
             textSize = 12f
             typeface = android.graphics.Typeface.MONOSPACE
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            setPadding(4, 4, 4, 4)
+            setPadding(0, 4, 0, 4)
             hint = "> "
             setHintTextColor(android.graphics.Color.GRAY)
-            // システムキーボードを抑制
-            inputType = android.text.InputType.TYPE_NULL
-            isSingleLine = true
-            isFocusable = true
-            isFocusableInTouchMode = true
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                    android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_ENTER_ACTION
+            isSingleLine = false
+            minLines = 1
         }
-        val runBtn = termKey("▶", android.graphics.Color.parseColor("#004400")) { runInput() }
-        inputRow.addView(activeInput)
-        inputRow.addView(runBtn)
 
-        // ── 独自キーボード ────────────────────────
-        val keyboard = buildCustomKeyboard()
+        // エクストラキーボード
+        val extraKeyboard = buildExtraKeyboard()
 
         root.addView(header)
-        root.addView(hPanel)
-        root.addView(recentArea)
-        root.addView(inputRow)
-        root.addView(keyboard)
+        root.addView(scrollView)
+        root.addView(activeInput)
+        root.addView(extraKeyboard)
 
         return root
     }
 
-    private lateinit var recentLine1: TextView
-    private lateinit var recentLine2: TextView
-
-    private fun toggleHistory() {
-        historyExpanded = !historyExpanded
-        historyPanel?.visibility = if (historyExpanded) android.view.View.VISIBLE else android.view.View.GONE
-        if (historyExpanded) {
-            scrollView.post { scrollView.fullScroll(android.view.View.FOCUS_DOWN) }
-        }
-    }
-
-    private fun buildCustomKeyboard(): LinearLayout {
-        val kb = LinearLayout(this).apply {
+    private fun buildExtraKeyboard(): LinearLayout {
+        val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(android.graphics.Color.parseColor("#222222"))
-            setPadding(2, 2, 2, 2)
+            setBackgroundColor(android.graphics.Color.parseColor("#111111"))
         }
 
-        val rows = listOf(
-            listOf("1","2","3","4","5","6","7","8","9","0","-","_"),
-            listOf("q","w","e","r","t","y","u","i","o","p"),
-            listOf("a","s","d","f","g","h","j","k","l"),
-            listOf("SHIFT","z","x","c","v","b","n","m","BS"),
-            listOf("(",")","\\'","\"",";",".","/","SPACE","↵")
-        )
-
-        for (row in rows) {
-            val rowLayout = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT)
-            }
-            for (key in row) {
-                val weight = when (key) {
-                    "SPACE" -> 3f
-                    "SHIFT", "BS", "↵" -> 1.5f
-                    else -> 1f
-                }
-                val bgColor = when (key) {
-                    "↵" -> android.graphics.Color.parseColor("#004400")
-                    "BS" -> android.graphics.Color.parseColor("#442200")
-                    "SHIFT" -> android.graphics.Color.parseColor("#222266")
-                    else -> android.graphics.Color.parseColor("#333333")
-                }
-                val btn = android.widget.Button(this).apply {
-                    text = key
-                    textSize = 10f
-                    setTextColor(android.graphics.Color.WHITE)
-                    setBackgroundColor(bgColor)
-                    setPadding(0, 6, 0, 6)
-                    layoutParams = LinearLayout.LayoutParams(0,
-                        LinearLayout.LayoutParams.WRAP_CONTENT, weight).apply {
-                        setMargins(1, 1, 1, 1)
-                    }
-                    setOnClickListener { onKeyPress(key) }
-                }
-                rowLayout.addView(btn)
-            }
-            kb.addView(rowLayout)
+        val symbolRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(4, 4, 4, 0)
         }
-        return kb
-    }
-
-    private fun onKeyPress(key: String) {
-        when (key) {
-            "BS" -> {
-                val text = activeInput.text
+        listOf("()", "\"", "'", ";", ".", "/").forEach { symbol ->
+            symbolRow.addView(extraKey(symbol) {
                 val pos = activeInput.selectionStart
-                if (pos > 0) text.delete(pos - 1, pos)
-            }
-            "↵" -> runInput()
-            "SPACE" -> activeInput.text.insert(activeInput.selectionStart, " ")
-            "SHIFT" -> {
-                isShiftOn = !isShiftOn
-            }
-            else -> {
-                val c = if (isShiftOn) key.uppercase() else key.lowercase()
-                activeInput.text.insert(activeInput.selectionStart, c)
-                if (isShiftOn) isShiftOn = false
-            }
+                activeInput.text.insert(pos, symbol)
+            })
         }
+        container.addView(symbolRow)
+
+        val actionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(4, 4, 4, 4)
+        }
+
+        actionRow.addView(extraKey("RUN", android.graphics.Color.parseColor("#005500")) {
+            runInput()
+        })
+
+        actionRow.addView(extraKey("PASTE") {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val text = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: return@extraKey
+            val pos = activeInput.selectionStart
+            activeInput.text.insert(pos, text)
+        })
+
+        actionRow.addView(extraKey("COPY") {
+            val selected = activeInput.text.substring(
+                activeInput.selectionStart.coerceAtLeast(0),
+                activeInput.selectionEnd.coerceAtLeast(0)
+            )
+            if (selected.isNotEmpty()) {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("copied", selected))
+                appendOutput("コピーしました")
+            }
+        })
+
+        actionRow.addView(extraKey("KB") {
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
+        })
+
+        container.addView(actionRow)
+        return container
     }
 
+    private fun extraKey(
+        label: String,
+        bgColor: Int = android.graphics.Color.parseColor("#222222"),
+        onClick: () -> Unit
+    ): Button {
+        return Button(this).apply {
+            text = label
+            textSize = 11f
+            setTextColor(android.graphics.Color.WHITE)
+            setBackgroundColor(bgColor)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                setMargins(2, 2, 2, 2)
+            }
+            setPadding(4, 8, 4, 8)
+            setOnClickListener { onClick() }
+        }
+    }
 
     // ======================================================
     // ターミナル入出力
@@ -422,29 +293,14 @@ class OverlayService : Service() {
     fun appendOutput(text: String) {
         mainHandler.post {
             if (!::terminalContainer.isInitialized) return@post
-
-            // 履歴に追加
-            outputHistory.add(text)
-
-            // 履歴パネル用TextView
             val tv = TextView(this).apply {
                 setTextColor(android.graphics.Color.GREEN)
-                textSize = 11f
+                textSize = 12f
                 typeface = android.graphics.Typeface.MONOSPACE
-                setTextIsSelectable(true)
                 this.text = text
             }
             terminalContainer.addView(tv)
-            if (historyExpanded) {
-                scrollView.post { scrollView.fullScroll(android.view.View.FOCUS_DOWN) }
-            }
-
-            // 最新2行を更新
-            val size = outputHistory.size
-            if (::recentLine1.isInitialized && ::recentLine2.isInitialized) {
-                recentLine1.text = if (size >= 2) outputHistory[size - 2] else ""
-                recentLine2.text = if (size >= 1) outputHistory[size - 1] else ""
-            }
+            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
         }
     }
 
@@ -473,7 +329,7 @@ class OverlayService : Service() {
         }
 
         Thread {
-            val scope = ScriptEngineService.rhinoScope
+            val scope = HubService.rhinoScope
             if (scope == null) {
                 appendOutput("エラー: Rhinoエンジン未起動")
                 return@Thread
@@ -508,12 +364,13 @@ class OverlayService : Service() {
     // ======================================================
 
     internal fun injectOverlayBridge() {
-        val scope = ScriptEngineService.rhinoScope ?: return
+        val scope = HubService.rhinoScope ?: return
         val service = this
 
         val cx = org.mozilla.javascript.Context.enter()
         cx.optimizationLevel = -1
         val overlay = cx.newObject(scope) as org.mozilla.javascript.NativeObject
+        org.mozilla.javascript.Context.exit()
 
         ScriptableObject.putProperty(overlay, "show", object : org.mozilla.javascript.BaseFunction() {
             override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
@@ -539,87 +396,11 @@ class OverlayService : Service() {
 
         ScriptableObject.putProperty(scope, "overlay", overlay)
         android.util.Log.d("MWVScript", "overlayブリッジ注入完了")
-
-        // WebViewブリッジ
-        val web = cx.newObject(scope) as org.mozilla.javascript.NativeObject
-        org.mozilla.javascript.Context.exit()
-
-        ScriptableObject.putProperty(web, "open", object : org.mozilla.javascript.BaseFunction() {
-            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
-                val url = args.getOrNull(0)?.let { org.mozilla.javascript.Context.toString(it) } ?: return null
-                val sessionId = args.getOrNull(1)?.let { org.mozilla.javascript.Context.toString(it) } ?: "default"
-                mainHandler.post {
-                    // セッション切り替え（Cookie保存→復元）
-                    if (sessionId != currentSessionId) {
-                        switchSession(sessionId, url)
-                    }
-                    webView?.let {
-                        it.loadUrl(url)
-                        it.visibility = View.VISIBLE
-                        webViewShowing = true
-                        val params = (it.layoutParams as WindowManager.LayoutParams).apply {
-                            flags = flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
-                        }
-                        windowManager.updateViewLayout(it, params)
-                    }
-                }
-                return org.mozilla.javascript.Context.getUndefinedValue()
-            }
-        })
-
-        ScriptableObject.putProperty(web, "close", object : org.mozilla.javascript.BaseFunction() {
-            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
-                mainHandler.post {
-                    webView?.let {
-                        // 現在のURLのCookieを保存
-                        val currentUrl = it.url
-                        if (currentUrl != null) saveCookies(currentSessionId, currentUrl)
-                        it.visibility = View.INVISIBLE
-                        webViewShowing = false
-                        val params = (it.layoutParams as WindowManager.LayoutParams).apply {
-                            flags = flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        }
-                        windowManager.updateViewLayout(it, params)
-                    }
-                }
-                return org.mozilla.javascript.Context.getUndefinedValue()
-            }
-        })
-
-        ScriptableObject.putProperty(web, "eval", object : org.mozilla.javascript.BaseFunction() {
-            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
-                val js = args.getOrNull(0)?.let { org.mozilla.javascript.Context.toString(it) } ?: return null
-                mainHandler.post { webView?.evaluateJavascript(js, null) }
-                return org.mozilla.javascript.Context.getUndefinedValue()
-            }
-        })
-
-        ScriptableObject.putProperty(scope, "web", web)
     }
 
     // ======================================================
     // 通知
     // ======================================================
-
-    private fun termKey(
-        label: String,
-        bgColor: Int = android.graphics.Color.parseColor("#333333"),
-        onClick: () -> Unit
-    ): android.widget.Button {
-        return android.widget.Button(this).apply {
-            text = label
-            textSize = 10f
-            setTextColor(android.graphics.Color.WHITE)
-            setBackgroundColor(bgColor)
-            setPadding(8, 4, 8, 4)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(2, 0, 2, 0)
-            }
-            setOnClickListener { onClick() }
-        }
-    }
 
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
@@ -637,20 +418,12 @@ class OverlayService : Service() {
             this, 0, toggleIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val exitIntent = Intent(this, OverlayService::class.java).apply {
-            action = ACTION_EXIT
-        }
-        val exitPi = PendingIntent.getService(
-            this, 1, exitIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
         val label = if (isShowing) "ターミナルを隠す" else "ターミナルを表示"
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("MWV Script")
             .setContentText("オーバーレイターミナル")
             .setSmallIcon(android.R.drawable.ic_menu_manage)
             .addAction(android.R.drawable.ic_menu_manage, label, togglePi)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "EXIT", exitPi)
             .setOngoing(true)
             .build()
     }
