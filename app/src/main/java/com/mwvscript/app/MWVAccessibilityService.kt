@@ -48,7 +48,7 @@ class MWVAccessibilityService : AccessibilityService() {
         node ?: return null
         val cx = org.mozilla.javascript.Context.enter()
         cx.optimizationLevel = -1
-        val obj = cx.newObject(ScriptEngineService.rhinoScope) as org.mozilla.javascript.NativeObject
+        val obj = cx.newObject(HubService.rhinoScope) as org.mozilla.javascript.NativeObject
         org.mozilla.javascript.Context.exit()
 
         val bounds = Rect()
@@ -116,7 +116,7 @@ class MWVAccessibilityService : AccessibilityService() {
 
     // Rhinoスコープにブリッジを注入
     internal fun injectAccessibilityBridge() {
-        val scope = ScriptEngineService.rhinoScope ?: return
+        val scope = HubService.rhinoScope ?: return
         val service = this
 
         // a11y オブジェクトとしてJS側に公開
