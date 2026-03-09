@@ -2,11 +2,14 @@ package com.mwvscript.app
 
 import android.app.Activity
 import android.content.*
+import android.net.Uri
 import android.os.*
+import android.provider.Settings
 import android.view.*
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import kotlin.system.exitProcess
 
 class MainActivity : AppCompatActivity() {
@@ -49,6 +52,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(root)
 
         instance = this
+        requestPermissions()
         startForegroundService(Intent(this, HubService::class.java))
         startForegroundService(Intent(this, OverlayService::class.java))
 
@@ -129,7 +133,40 @@ class MainActivity : AppCompatActivity() {
         addNewInput()
     }
 
-    // printLine（ScriptEngineServiceから呼ばれる）
+    private fun requestPermissions() {
+        // 通常権限（まとめてリクエスト）
+        val perms = mutableListOf(
+            android.Manifest.permission.POST_NOTIFICATIONS,
+            android.Manifest.permission.READ_EXTERNAL_STORAGE,
+            android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            android.Manifest.permission.CAMERA,
+            android.Manifest.permission.RECORD_AUDIO,
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.READ_CONTACTS,
+            android.Manifest.permission.READ_PHONE_STATE,
+        )
+        ActivityCompat.requestPermissions(this, perms.toTypedArray(), 0)
+
+        // オーバーレイ権限
+        if (!Settings.canDrawOverlays(this)) {
+            startActivity(Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            ))
+        }
+
+        // 全ファイルアクセス権限（Android 11以上）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                startActivity(Intent(
+                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:$packageName")
+                ))
+            }
+        }
+    }
+
+    // printLine（HubServiceから呼ばれる）
     fun printLine(text: String) {
         appendOutput(text)
     }
