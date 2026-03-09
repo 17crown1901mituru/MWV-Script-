@@ -395,6 +395,50 @@ class OverlayService : Service() {
         })
 
         ScriptableObject.putProperty(scope, "overlay", overlay)
+
+        // web オブジェクト
+        val cx2 = org.mozilla.javascript.Context.enter()
+        cx2.optimizationLevel = -1
+        val web = cx2.newObject(scope) as org.mozilla.javascript.NativeObject
+        org.mozilla.javascript.Context.exit()
+
+        // web.open(url, sessionId?)
+        ScriptableObject.putProperty(web, "open", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val url = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "about:blank")
+                mainHandler.post {
+                    val intent = Intent(service, WebViewActivity::class.java).apply {
+                        putExtra("url", url)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    service.startActivity(intent)
+                }
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        // web.eval(js)
+        ScriptableObject.putProperty(web, "eval", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val js = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "")
+                mainHandler.post {
+                    WebViewActivity.instance?.evaluateJs(js)
+                }
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        // web.close()
+        ScriptableObject.putProperty(web, "close", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                mainHandler.post {
+                    WebViewActivity.instance?.finish()
+                }
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        ScriptableObject.putProperty(scope, "web", web)
         android.util.Log.d("MWVScript", "overlayブリッジ注入完了")
     }
 
