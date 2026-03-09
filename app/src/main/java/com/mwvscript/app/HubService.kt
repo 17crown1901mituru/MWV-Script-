@@ -110,6 +110,8 @@ class HubService : Service() {
             // OverlayService・AccessibilityServiceのブリッジ注入
             OverlayService.instance?.injectOverlayBridge()
             MWVAccessibilityService.instance?.injectAccessibilityBridge()
+            MWVNotificationListener.instance?.injectNotifyBridge()
+            MWVTileService.instance?.injectTileBridge()
 
             isReady = true
             updateNotification("MWV Script 実行中")
