@@ -155,12 +155,8 @@
         <!-- OverlayService: WebView・UI管理（将来的にrjsへ移管） -->
         <service
             android:name=".OverlayService"
-            android:foregroundServiceType="specialUse"
-            android:exported="false">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="overlay and webview manager" />
-        </service>
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
 
         <!-- ScriptEngineService: 後方互換用 -->
         <service
