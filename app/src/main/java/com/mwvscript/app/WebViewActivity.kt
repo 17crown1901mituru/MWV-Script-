@@ -10,16 +10,22 @@ import androidx.appcompat.app.AppCompatActivity
 class WebViewActivity : AppCompatActivity() {
 
     companion object {
-        var instance: WebViewActivity? = null
+        // セッションIDで複数WebViewインスタンスを管理
+        val sessions = mutableMapOf<String, WebViewActivity>()
+        const val DEFAULT_SESSION = "default"
     }
 
-    private lateinit var webView: WebView
+    lateinit var webView: WebView
+    var sessionId: String = DEFAULT_SESSION
     private lateinit var etConsole: EditText
     private lateinit var tvConsoleOutput: TextView
     private lateinit var scrollView: ScrollView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        sessionId = intent.getStringExtra("sessionId") ?: DEFAULT_SESSION
+        sessions[sessionId] = this
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -40,7 +46,6 @@ class WebViewActivity : AppCompatActivity() {
             }
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, url: String) {
-                    // IntentからJSがあれば注入
                     val js = intent.getStringExtra("js") ?: return
                     if (js.isNotEmpty()) view.evaluateJavascript(js, null)
                 }
@@ -52,6 +57,10 @@ class WebViewActivity : AppCompatActivity() {
                 }
             }
         }
+
+        val cookieManager = CookieManager.getInstance()
+        cookieManager.setAcceptCookie(true)
+        cookieManager.setAcceptThirdPartyCookies(webView, true)
 
         tvConsoleOutput = TextView(this).apply {
             setTextColor(android.graphics.Color.GREEN)
@@ -87,7 +96,6 @@ class WebViewActivity : AppCompatActivity() {
         root.addView(etConsole)
         setContentView(root)
 
-        // コンソール入力
         etConsole.setOnEditorActionListener { _, actionId, event ->
             if (actionId == EditorInfo.IME_ACTION_SEND ||
                 (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)) {
@@ -103,16 +111,11 @@ class WebViewActivity : AppCompatActivity() {
             } else false
         }
 
-        // URLを読み込む
         val url = intent.getStringExtra("url") ?: "about:blank"
         webView.loadUrl(url)
 
-        instance = this
-
-        // WebViewActivityの参照をRhinoスコープに登録
         HubService.rhinoScope?.let { scope ->
-            org.mozilla.javascript.ScriptableObject.putProperty(scope, "webView", webView)
-            org.mozilla.javascript.ScriptableObject.putProperty(scope, "currentWebView", this)
+            org.mozilla.javascript.ScriptableObject.putProperty(scope, "webView_$sessionId", webView)
         }
     }
 
@@ -124,6 +127,12 @@ class WebViewActivity : AppCompatActivity() {
         }
     }
 
+    fun getCurrentUrl(): String = webView.url ?: ""
+
+    fun getCookies(): String {
+        return CookieManager.getInstance().getCookie(webView.url ?: "") ?: ""
+    }
+
     private fun printConsole(text: String) {
         runOnUiThread {
             tvConsoleOutput.append("$text\n")
@@ -132,11 +141,10 @@ class WebViewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        instance = null
+        sessions.remove(sessionId)
         webView.destroy()
         HubService.rhinoScope?.let { scope ->
-            org.mozilla.javascript.ScriptableObject.putProperty(scope, "webView", null)
-            org.mozilla.javascript.ScriptableObject.putProperty(scope, "currentWebView", null)
+            org.mozilla.javascript.ScriptableObject.putProperty(scope, "webView_$sessionId", null)
         }
         super.onDestroy()
     }
