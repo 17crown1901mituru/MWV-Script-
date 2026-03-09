@@ -396,7 +396,9 @@ class OverlayService : Service() {
 
         ScriptableObject.putProperty(scope, "overlay", overlay)
 
-        // web オブジェクト
+        // ======================================================
+        // web オブジェクト（複数セッション対応）
+        // ======================================================
         val cx2 = org.mozilla.javascript.Context.enter()
         cx2.optimizationLevel = -1
         val web = cx2.newObject(scope) as org.mozilla.javascript.NativeObject
@@ -405,10 +407,13 @@ class OverlayService : Service() {
         // web.open(url, sessionId?)
         ScriptableObject.putProperty(web, "open", object : org.mozilla.javascript.BaseFunction() {
             override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
-                val url = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "about:blank")
+                val url       = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "about:blank")
+                val sessionId = if (args.size > 1) org.mozilla.javascript.Context.toString(args[1])
+                                else WebViewActivity.DEFAULT_SESSION
                 mainHandler.post {
                     val intent = Intent(service, WebViewActivity::class.java).apply {
                         putExtra("url", url)
+                        putExtra("sessionId", sessionId)
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
                     service.startActivity(intent)
@@ -417,28 +422,311 @@ class OverlayService : Service() {
             }
         })
 
-        // web.eval(js)
+        // web.eval(js, sessionId?, callback?)
         ScriptableObject.putProperty(web, "eval", object : org.mozilla.javascript.BaseFunction() {
             override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
-                val js = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "")
-                mainHandler.post {
-                    WebViewActivity.instance?.evaluateJs(js)
+                val js        = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "")
+                val sessionId = if (args.size > 1) org.mozilla.javascript.Context.toString(args[1])
+                                else WebViewActivity.DEFAULT_SESSION
+                val callback  = args.getOrNull(2) as? org.mozilla.javascript.Function
+                val activity  = WebViewActivity.sessions[sessionId]
+                if (activity == null) {
+                    android.util.Log.e("MWVScript", "web.eval: セッション未存在: $sessionId")
+                    return org.mozilla.javascript.Context.getUndefinedValue()
+                }
+                activity.evaluateJs(js) { result ->
+                    if (callback != null) {
+                        try {
+                            val cx2 = org.mozilla.javascript.Context.enter()
+                            cx2.optimizationLevel = -1
+                            callback.call(cx2, scope, scope, arrayOf(result))
+                            org.mozilla.javascript.Context.exit()
+                        } catch (e: Exception) {
+                            android.util.Log.e("MWVScript", "web.eval callback: ${e.message}")
+                        }
+                    }
                 }
                 return org.mozilla.javascript.Context.getUndefinedValue()
             }
         })
 
-        // web.close()
-        ScriptableObject.putProperty(web, "close", object : org.mozilla.javascript.BaseFunction() {
+        // web.evalOn(sessionId, js, callback?) - evalの糖衣構文
+        ScriptableObject.putProperty(web, "evalOn", object : org.mozilla.javascript.BaseFunction() {
             override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
-                mainHandler.post {
-                    WebViewActivity.instance?.finish()
+                val sessionId = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: WebViewActivity.DEFAULT_SESSION)
+                val js        = org.mozilla.javascript.Context.toString(args.getOrNull(1) ?: "")
+                val callback  = args.getOrNull(2) as? org.mozilla.javascript.Function
+                val activity  = WebViewActivity.sessions[sessionId]
+                if (activity == null) {
+                    android.util.Log.e("MWVScript", "web.evalOn: セッション未存在: $sessionId")
+                    return org.mozilla.javascript.Context.getUndefinedValue()
+                }
+                activity.evaluateJs(js) { result ->
+                    if (callback != null) {
+                        try {
+                            val cx2 = org.mozilla.javascript.Context.enter()
+                            cx2.optimizationLevel = -1
+                            callback.call(cx2, scope, scope, arrayOf(result))
+                            org.mozilla.javascript.Context.exit()
+                        } catch (e: Exception) {
+                            android.util.Log.e("MWVScript", "web.evalOn callback: ${e.message}")
+                        }
+                    }
                 }
                 return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        // web.close(sessionId?)
+        ScriptableObject.putProperty(web, "close", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val sessionId = if (args.isNotEmpty()) org.mozilla.javascript.Context.toString(args[0])
+                                else WebViewActivity.DEFAULT_SESSION
+                mainHandler.post { WebViewActivity.sessions[sessionId]?.finish() }
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        // web.url(sessionId?) → 現在のURL
+        ScriptableObject.putProperty(web, "url", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val sessionId = if (args.isNotEmpty()) org.mozilla.javascript.Context.toString(args[0])
+                                else WebViewActivity.DEFAULT_SESSION
+                return WebViewActivity.sessions[sessionId]?.getCurrentUrl() ?: ""
+            }
+        })
+
+        // web.cookies(sessionId?) → Cookie文字列
+        ScriptableObject.putProperty(web, "cookies", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val sessionId = if (args.isNotEmpty()) org.mozilla.javascript.Context.toString(args[0])
+                                else WebViewActivity.DEFAULT_SESSION
+                return WebViewActivity.sessions[sessionId]?.getCookies() ?: ""
+            }
+        })
+
+        // web.sessions() → 起動中のセッションID一覧
+        ScriptableObject.putProperty(web, "sessions", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val cx2 = org.mozilla.javascript.Context.enter()
+                cx2.optimizationLevel = -1
+                val arr = cx2.newArray(scope, WebViewActivity.sessions.keys.toTypedArray())
+                org.mozilla.javascript.Context.exit()
+                return arr
+            }
+        })
+
+        // web.set(key, value) → セッション間共有変数
+        // web.get(key)        → セッション間共有変数取得
+        val sharedVars = mutableMapOf<String, Any?>()
+        ScriptableObject.putProperty(web, "set", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val key   = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "")
+                val value = args.getOrNull(1)
+                sharedVars[key] = value
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+        ScriptableObject.putProperty(web, "get", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val key = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "")
+                return sharedVars[key] ?: org.mozilla.javascript.Context.getUndefinedValue()
             }
         })
 
         ScriptableObject.putProperty(scope, "web", web)
+
+        // ======================================================
+        // terminal オブジェクト
+        // ======================================================
+        val cx3 = org.mozilla.javascript.Context.enter()
+        cx3.optimizationLevel = -1
+        val terminal = cx3.newObject(scope) as org.mozilla.javascript.NativeObject
+        org.mozilla.javascript.Context.exit()
+
+        // terminal.setInput(text) → MainActivityの入力欄にテキストをセット
+        ScriptableObject.putProperty(terminal, "setInput", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val text = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "")
+                mainHandler.post { MainActivity.instance?.setInput(text) }
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        // terminal.run(script) → 入力欄にセットしてそのまま実行
+        ScriptableObject.putProperty(terminal, "run", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val script = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "")
+                HubService.instance?.executeAsync(script)
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        ScriptableObject.putProperty(scope, "terminal", terminal)
+
+        // ======================================================
+        // shell オブジェクト
+        // ======================================================
+        val cxShell = org.mozilla.javascript.Context.enter()
+        cxShell.optimizationLevel = -1
+        val shell = cxShell.newObject(scope) as org.mozilla.javascript.NativeObject
+        org.mozilla.javascript.Context.exit()
+
+        // shell.exec(cmd, callback?) → Runtime.exec で実行
+        ScriptableObject.putProperty(shell, "exec", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val cmd      = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "")
+                val callback = args.getOrNull(1) as? org.mozilla.javascript.Function
+                Thread {
+                    try {
+                        val proc = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
+                        val out  = proc.inputStream.bufferedReader().readText()
+                        val err  = proc.errorStream.bufferedReader().readText()
+                        proc.waitFor()
+                        val result = if (err.isNotEmpty()) err else out
+                        if (callback != null) {
+                            val cx2 = org.mozilla.javascript.Context.enter()
+                            cx2.optimizationLevel = -1
+                            callback.call(cx2, scope, scope, arrayOf(result))
+                            org.mozilla.javascript.Context.exit()
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("MWVScript", "shell.exec: ${e.message}")
+                    }
+                }.start()
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        // shell.termux(cmd) → Termuxにコマンドを送る
+        ScriptableObject.putProperty(shell, "termux", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val cmd = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "")
+                val intent = Intent().apply {
+                    setClassName("com.termux", "com.termux.app.RunCommandService")
+                    action = "com.termux.RUN_COMMAND"
+                    putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/bash")
+                    putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf("-c", cmd))
+                    putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
+                }
+                try { service.startService(intent) }
+                catch (e: Exception) { android.util.Log.e("MWVScript", "shell.termux: ${e.message}") }
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        // shell.tap(x, y) → アクセシビリティ経由タップ
+        ScriptableObject.putProperty(shell, "tap", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val x = (args.getOrNull(0) as? Number)?.toFloat() ?: 0f
+                val y = (args.getOrNull(1) as? Number)?.toFloat() ?: 0f
+                MWVAccessibilityService.instance?.tap(x, y)
+                    ?: android.util.Log.e("MWVScript", "shell.tap: アクセシビリティ未接続")
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        // shell.swipe(x1, y1, x2, y2, duration?)
+        ScriptableObject.putProperty(shell, "swipe", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val x1       = (args.getOrNull(0) as? Number)?.toFloat() ?: 0f
+                val y1       = (args.getOrNull(1) as? Number)?.toFloat() ?: 0f
+                val x2       = (args.getOrNull(2) as? Number)?.toFloat() ?: 0f
+                val y2       = (args.getOrNull(3) as? Number)?.toFloat() ?: 0f
+                val duration = (args.getOrNull(4) as? Number)?.toLong() ?: 300L
+                MWVAccessibilityService.instance?.swipe(x1, y1, x2, y2, duration)
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        ScriptableObject.putProperty(scope, "shell", shell)
+
+        // ======================================================
+        // alarm オブジェクト（スケジュール実行）
+        // ======================================================
+        val cxAlarm = org.mozilla.javascript.Context.enter()
+        cxAlarm.optimizationLevel = -1
+        val alarm = cxAlarm.newObject(scope) as org.mozilla.javascript.NativeObject
+        org.mozilla.javascript.Context.exit()
+
+        val alarmManager = service.getSystemService(android.app.AlarmManager::class.java)
+
+        // alarm.set(delayMs, script) → delay後にscriptを実行
+        ScriptableObject.putProperty(alarm, "set", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val delayMs = (args.getOrNull(0) as? Number)?.toLong() ?: 0L
+                val script  = org.mozilla.javascript.Context.toString(args.getOrNull(1) ?: "")
+                val intent  = Intent(service, HubService::class.java).apply {
+                    action = HubService.ACTION_EXECUTE
+                    putExtra(HubService.EXTRA_SCRIPT, script)
+                }
+                val pi = android.app.PendingIntent.getService(
+                    service, script.hashCode(), intent,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+                alarmManager.setExactAndAllowWhileIdle(
+                    android.app.AlarmManager.RTC_WAKEUP,
+                    System.currentTimeMillis() + delayMs, pi
+                )
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        // alarm.cancel(script) → 登録済みのアラームをキャンセル
+        ScriptableObject.putProperty(alarm, "cancel", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val script = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "")
+                val intent = Intent(service, HubService::class.java).apply {
+                    action = HubService.ACTION_EXECUTE
+                    putExtra(HubService.EXTRA_SCRIPT, script)
+                }
+                val pi = android.app.PendingIntent.getService(
+                    service, script.hashCode(), intent,
+                    android.app.PendingIntent.FLAG_NO_CREATE or android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+                if (pi != null) alarmManager.cancel(pi)
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        ScriptableObject.putProperty(scope, "alarm", alarm)
+
+        // ======================================================
+        // screen オブジェクト（スクリーンショット）
+        // ======================================================
+        val cxScreen = org.mozilla.javascript.Context.enter()
+        cxScreen.optimizationLevel = -1
+        val screen = cxScreen.newObject(scope) as org.mozilla.javascript.NativeObject
+        org.mozilla.javascript.Context.exit()
+
+        // screen.capture(callback) → スクリーンショットをBase64でcallbackに渡す
+        ScriptableObject.putProperty(screen, "capture", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val callback = args.getOrNull(0) as? org.mozilla.javascript.Function
+                MediaProjectionActivity.pendingCallback = { intentData ->
+                    if (intentData != null && callback != null) {
+                        try {
+                            val cx2 = org.mozilla.javascript.Context.enter()
+                            cx2.optimizationLevel = -1
+                            // intentDataをBase64文字列としてコールバックに渡す
+                            // 実際の画像取得はMediaProjectionManagerで別途実装
+                            callback.call(cx2, scope, scope, arrayOf(intentData.toString()))
+                            org.mozilla.javascript.Context.exit()
+                        } catch (e: Exception) {
+                            android.util.Log.e("MWVScript", "screen.capture callback: ${e.message}")
+                        }
+                    }
+                }
+                val intent = Intent(service, MediaProjectionActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                service.startActivity(intent)
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        ScriptableObject.putProperty(scope, "screen", screen)
+
         android.util.Log.d("MWVScript", "overlayブリッジ注入完了")
     }
 
