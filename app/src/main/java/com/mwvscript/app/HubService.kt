@@ -48,7 +48,7 @@ class HubService : Service() {
         instance = this
         createNotificationChannel()
         startForeground(NOTIF_ID, buildNotification("MWV Script 起動中..."))
-        registerReceiver(executeReceiver, IntentFilter(ACTION_EXECUTE))
+        registerReceiver(executeReceiver, IntentFilter(ACTION_EXECUTE), RECEIVER_NOT_EXPORTED)
         Thread { initRhino() }.start()
     }
 
