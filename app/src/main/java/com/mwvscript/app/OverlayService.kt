@@ -19,6 +19,7 @@ class OverlayService : Service() {
         const val CHANNEL_ID = "mwv_overlay"
         const val NOTIF_ID = 1002
         const val ACTION_TOGGLE = "com.mwvscript.app.OVERLAY_TOGGLE"
+        const val ACTION_EXIT = "com.mwvscript.app.APP_EXIT"
 
         fun toggle(context: Context) {
             val intent = Intent(context, OverlayService::class.java).apply {
@@ -30,6 +31,7 @@ class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var overlayView: View? = null
+    private var overlayParams: WindowManager.LayoutParams? = null
     private var isShowing = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -88,6 +90,11 @@ class OverlayService : Service() {
         if (intent?.action == ACTION_TOGGLE) {
             if (isShowing) hideOverlay() else showOverlay()
         }
+        if (intent?.action == ACTION_EXIT) {
+            hideOverlay()
+            stopSelf()
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
         return START_STICKY
     }
 
@@ -124,7 +131,8 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -133,15 +141,26 @@ class OverlayService : Service() {
 
         windowManager.addView(view, params)
         overlayView = view
+        overlayParams = params
         isShowing = true
         updateNotification()
-        mainHandler.post { activeInput.requestFocus() }
+
+        // 入力欄タップ時にフォーカスを有効化
+        activeInput.setOnTouchListener { _, _ ->
+            val lp = params.apply {
+                flags = flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+            }
+            windowManager.updateViewLayout(view, lp)
+            activeInput.requestFocus()
+            false
+        }
     }
 
     private fun hideOverlay() {
         overlayView?.let {
             try { windowManager.removeView(it) } catch (e: Exception) { }
             overlayView = null
+            overlayParams = null
         }
         isShowing = false
         updateNotification()
@@ -618,12 +637,20 @@ class OverlayService : Service() {
             this, 0, toggleIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val exitIntent = Intent(this, OverlayService::class.java).apply {
+            action = ACTION_EXIT
+        }
+        val exitPi = PendingIntent.getService(
+            this, 1, exitIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val label = if (isShowing) "ターミナルを隠す" else "ターミナルを表示"
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("MWV Script")
             .setContentText("オーバーレイターミナル")
             .setSmallIcon(android.R.drawable.ic_menu_manage)
             .addAction(android.R.drawable.ic_menu_manage, label, togglePi)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "EXIT", exitPi)
             .setOngoing(true)
             .build()
     }
