@@ -9,6 +9,10 @@ import androidx.appcompat.app.AppCompatActivity
 
 class WebViewActivity : AppCompatActivity() {
 
+    companion object {
+        var instance: WebViewActivity? = null
+    }
+
     private lateinit var webView: WebView
     private lateinit var etConsole: EditText
     private lateinit var tvConsoleOutput: TextView
@@ -103,10 +107,20 @@ class WebViewActivity : AppCompatActivity() {
         val url = intent.getStringExtra("url") ?: "about:blank"
         webView.loadUrl(url)
 
+        instance = this
+
         // WebViewActivityの参照をRhinoスコープに登録
-        ScriptEngineService.rhinoScope?.let { scope ->
+        HubService.rhinoScope?.let { scope ->
             org.mozilla.javascript.ScriptableObject.putProperty(scope, "webView", webView)
             org.mozilla.javascript.ScriptableObject.putProperty(scope, "currentWebView", this)
+        }
+    }
+
+    fun evaluateJs(js: String, callback: ((String) -> Unit)? = null) {
+        runOnUiThread {
+            webView.evaluateJavascript(js) { result ->
+                callback?.invoke(result ?: "")
+            }
         }
     }
 
@@ -118,9 +132,9 @@ class WebViewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        instance = null
         webView.destroy()
-        // スコープからwebViewを削除
-        ScriptEngineService.rhinoScope?.let { scope ->
+        HubService.rhinoScope?.let { scope ->
             org.mozilla.javascript.ScriptableObject.putProperty(scope, "webView", null)
             org.mozilla.javascript.ScriptableObject.putProperty(scope, "currentWebView", null)
         }
