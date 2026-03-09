@@ -10,6 +10,8 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlin.system.exitProcess
 
 class MainActivity : AppCompatActivity() {
@@ -58,6 +60,11 @@ class MainActivity : AppCompatActivity() {
 
         appendOutput("MWV Script Terminal v2.0")
         appendOutput("")
+
+        // アカウント未登録なら登録ダイアログを表示
+        if (AccountManager.getAccounts(this).isEmpty()) {
+            mainHandler.postDelayed({ showAddAccountDialog() }, 500)
+        }
         addNewInput()
     }
 
@@ -133,6 +140,54 @@ class MainActivity : AppCompatActivity() {
         addNewInput()
     }
 
+    // ======================================================
+    // アカウント管理
+    // ======================================================
+
+    fun showAddAccountDialog(onComplete: (() -> Unit)? = null) {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 24, 48, 8)
+        }
+
+        val etSession = EditText(this).apply {
+            hint = "セッション名（例: account1）"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+        }
+        val etEmail = EditText(this).apply {
+            hint = "メールアドレス"
+            inputType = android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+        }
+        val etPassword = EditText(this).apply {
+            hint = "パスワード"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+
+        layout.addView(TextView(this).apply { text = "アカウント登録" ; textSize = 14f })
+        layout.addView(etSession)
+        layout.addView(etEmail)
+        layout.addView(etPassword)
+
+        android.app.AlertDialog.Builder(this)
+            .setTitle("アカウント追加")
+            .setView(layout)
+            .setPositiveButton("追加") { _, _ ->
+                val session  = etSession.text.toString().trim()
+                val email    = etEmail.text.toString().trim()
+                val password = etPassword.text.toString().trim()
+                if (session.isNotEmpty() && email.isNotEmpty() && password.isNotEmpty()) {
+                    AccountManager.addAccount(this, session, email, password)
+                    appendOutput("アカウント登録完了: $session")
+                    onComplete?.invoke()
+                } else {
+                    appendOutput("入力が不足しています")
+                }
+            }
+            .setNegativeButton("キャンセル", null)
+            .show()
+    }
+
     private fun requestPermissions() {
         // 通常権限（まとめてリクエスト）
         val perms = mutableListOf(
@@ -169,6 +224,16 @@ class MainActivity : AppCompatActivity() {
     // printLine（HubServiceから呼ばれる）
     fun printLine(text: String) {
         appendOutput(text)
+    }
+
+    // setInput（rjsのterminal.setInput()から呼ばれる）
+    fun setInput(text: String) {
+        mainHandler.post {
+            if (::activeInput.isInitialized) {
+                activeInput.setText(text)
+                activeInput.setSelection(text.length)
+            }
+        }
     }
 
     private fun scrollToBottom() {
