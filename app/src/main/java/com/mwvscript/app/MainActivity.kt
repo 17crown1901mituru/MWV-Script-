@@ -15,14 +15,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // SYSTEM_ALERT_WINDOW権限チェック
-        if (!android.provider.Settings.canDrawOverlays(this)) {
-            val intent = Intent(
-                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                android.net.Uri.parse("package:$packageName")
-            )
-            startActivity(intent)
-        }
+        requestAllPermissions()
 
         startForegroundService(Intent(this, ScriptEngineService::class.java))
         startForegroundService(Intent(this, OverlayService::class.java))
@@ -144,9 +137,60 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun requestAllPermissions() {
+        // 通常権限（requestPermissionsで要求可能）
+        val permissions = mutableListOf<String>()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+        if (permissions.isNotEmpty()) {
+            requestPermissions(permissions.toTypedArray(), 100)
+        }
+
+        // SYSTEM_ALERT_WINDOW（設定画面への遷移が必要）
+        if (!android.provider.Settings.canDrawOverlays(this)) {
+            android.widget.Toast.makeText(this,
+                "「他のアプリの上に重ねて表示」を許可してください", android.widget.Toast.LENGTH_LONG).show()
+            startActivity(Intent(
+                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                android.net.Uri.parse("package:$packageName")
+            ))
+            return
+        }
+
+        // MANAGE_EXTERNAL_STORAGE（設定画面への遷移が必要）
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            if (!android.os.Environment.isExternalStorageManager()) {
+                android.widget.Toast.makeText(this,
+                    "「全ファイルへのアクセス」を許可してください", android.widget.Toast.LENGTH_LONG).show()
+                startActivity(Intent(
+                    android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    android.net.Uri.parse("package:$packageName")
+                ))
+                return
+            }
+        }
+
+        // アクセシビリティサービスの案内（コードからは要求不可）
+        if (MWVAccessibilityService.instance == null) {
+            android.widget.Toast.makeText(this,
+                "設定→ユーザー補助→MWV Script Accessibilityを有効にしてください",
+                android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private var permissionsRequested = false
+
     override fun onResume() {
         super.onResume()
         ScriptEngineService.activityRef = this
+        if (!permissionsRequested) {
+            permissionsRequested = true
+            requestAllPermissions()
+        }
     }
 
     override fun onDestroy() {
