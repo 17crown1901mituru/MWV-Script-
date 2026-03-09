@@ -122,9 +122,9 @@ class OverlayService : Service() {
         val view = buildOverlayView()
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
-            getScreenHeight() * 35 / 100,
+            WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -135,17 +135,7 @@ class OverlayService : Service() {
         overlayView = view
         isShowing = true
         updateNotification()
-
-        // フォーカスを有効にして入力できるようにする
-        mainHandler.postDelayed({
-            try {
-                val lp = params.apply {
-                    flags = flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
-                }
-                windowManager.updateViewLayout(view, lp)
-                activeInput.requestFocus()
-            } catch (e: Exception) { }
-        }, 100)
+        mainHandler.post { activeInput.requestFocus() }
     }
 
     private fun hideOverlay() {
@@ -209,81 +199,200 @@ class OverlayService : Service() {
     // オーバーレイUI構築
     // ======================================================
 
+    // 履歴パネル表示状態
+    private var historyExpanded = false
+    private var historyPanel: LinearLayout? = null
+    private val outputHistory = mutableListOf<String>()
+    private var isShiftOn = false
+
     private fun buildOverlayView(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(android.graphics.Color.parseColor("#DD000000"))
+            setBackgroundColor(android.graphics.Color.parseColor("#EE000000"))
         }
 
-        // ヘッダーバー
+        // ── ヘッダー ──────────────────────────────
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(android.graphics.Color.parseColor("#1a1a1a"))
-            setPadding(16, 8, 8, 8)
+            setPadding(12, 4, 4, 4)
         }
-
         val title = TextView(this).apply {
-            text = "MWV Terminal"
+            text = "MWV"
             setTextColor(android.graphics.Color.GREEN)
-            textSize = 12f
+            textSize = 11f
             typeface = android.graphics.Typeface.MONOSPACE
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-
-        val closeBtn = Button(this).apply {
-            text = "✕"
-            textSize = 11f
-            setTextColor(android.graphics.Color.WHITE)
-            setBackgroundColor(android.graphics.Color.parseColor("#550000"))
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(4, 0, 4, 0)
-            }
-            setPadding(16, 4, 16, 4)
-            setOnClickListener { hideOverlay() }
-        }
-
+        val histBtn = termKey("LOG") { toggleHistory() }
+        val closeBtn = termKey("✕", android.graphics.Color.parseColor("#550000")) { hideOverlay() }
         header.addView(title)
+        header.addView(histBtn)
         header.addView(closeBtn)
 
-        // ターミナル本体
-        val termBody = LinearLayout(this).apply {
+        // ── 履歴パネル（折りたたみ） ────────────────
+        val hPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(12, 8, 12, 8)
+            visibility = android.view.View.GONE
+            setBackgroundColor(android.graphics.Color.parseColor("#CC111111"))
         }
-        terminalContainer = termBody
-
-        scrollView = ScrollView(this).apply {
+        val hScroll = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-            addView(terminalContainer)
+                LinearLayout.LayoutParams.MATCH_PARENT, 160)
         }
+        terminalContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(12, 4, 12, 4)
+        }
+        hScroll.addView(terminalContainer)
+        hPanel.addView(hScroll)
+        historyPanel = hPanel
+        scrollView = hScroll
 
-        // 入力欄
+        // ── 最新出力2行 ───────────────────────────
+        val recentArea = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(12, 4, 12, 2)
+            setBackgroundColor(android.graphics.Color.parseColor("#CC000000"))
+        }
+        recentLine1 = TextView(this).apply {
+            setTextColor(android.graphics.Color.parseColor("#888888"))
+            textSize = 11f
+            typeface = android.graphics.Typeface.MONOSPACE
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.START
+            text = ""
+        }
+        recentLine2 = TextView(this).apply {
+            setTextColor(android.graphics.Color.GREEN)
+            textSize = 11f
+            typeface = android.graphics.Typeface.MONOSPACE
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.START
+            text = ""
+        }
+        recentArea.addView(recentLine1)
+        recentArea.addView(recentLine2)
+
+        // ── 入力欄 ────────────────────────────────
+        val inputRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(android.graphics.Color.parseColor("#1a1a1a"))
+            setPadding(8, 2, 8, 2)
+        }
         activeInput = EditText(this).apply {
             setTextColor(android.graphics.Color.WHITE)
             textSize = 12f
             typeface = android.graphics.Typeface.MONOSPACE
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            setPadding(0, 4, 0, 4)
+            setPadding(4, 4, 4, 4)
             hint = "> "
             setHintTextColor(android.graphics.Color.GRAY)
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                    android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_GO
+            // システムキーボードを抑制
+            inputType = android.text.InputType.TYPE_NULL
             isSingleLine = true
-            setOnEditorActionListener { _, _, _ ->
-                runInput()
-                true
-            }
+            isFocusable = true
+            isFocusableInTouchMode = true
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
+        val runBtn = termKey("▶", android.graphics.Color.parseColor("#004400")) { runInput() }
+        inputRow.addView(activeInput)
+        inputRow.addView(runBtn)
+
+        // ── 独自キーボード ────────────────────────
+        val keyboard = buildCustomKeyboard()
 
         root.addView(header)
-        root.addView(activeInput)
-        root.addView(scrollView)
+        root.addView(hPanel)
+        root.addView(recentArea)
+        root.addView(inputRow)
+        root.addView(keyboard)
 
         return root
+    }
+
+    private lateinit var recentLine1: TextView
+    private lateinit var recentLine2: TextView
+
+    private fun toggleHistory() {
+        historyExpanded = !historyExpanded
+        historyPanel?.visibility = if (historyExpanded) android.view.View.VISIBLE else android.view.View.GONE
+        if (historyExpanded) {
+            scrollView.post { scrollView.fullScroll(android.view.View.FOCUS_DOWN) }
+        }
+    }
+
+    private fun buildCustomKeyboard(): LinearLayout {
+        val kb = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(android.graphics.Color.parseColor("#222222"))
+            setPadding(2, 2, 2, 2)
+        }
+
+        val rows = listOf(
+            listOf("1","2","3","4","5","6","7","8","9","0","-","_"),
+            listOf("q","w","e","r","t","y","u","i","o","p"),
+            listOf("a","s","d","f","g","h","j","k","l"),
+            listOf("SHIFT","z","x","c","v","b","n","m","BS"),
+            listOf("(",")","\\'","\"",";",".","/","SPACE","↵")
+        )
+
+        for (row in rows) {
+            val rowLayout = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT)
+            }
+            for (key in row) {
+                val weight = when (key) {
+                    "SPACE" -> 3f
+                    "SHIFT", "BS", "↵" -> 1.5f
+                    else -> 1f
+                }
+                val bgColor = when (key) {
+                    "↵" -> android.graphics.Color.parseColor("#004400")
+                    "BS" -> android.graphics.Color.parseColor("#442200")
+                    "SHIFT" -> android.graphics.Color.parseColor("#222266")
+                    else -> android.graphics.Color.parseColor("#333333")
+                }
+                val btn = android.widget.Button(this).apply {
+                    text = key
+                    textSize = 10f
+                    setTextColor(android.graphics.Color.WHITE)
+                    setBackgroundColor(bgColor)
+                    setPadding(0, 6, 0, 6)
+                    layoutParams = LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, weight).apply {
+                        setMargins(1, 1, 1, 1)
+                    }
+                    setOnClickListener { onKeyPress(key) }
+                }
+                rowLayout.addView(btn)
+            }
+            kb.addView(rowLayout)
+        }
+        return kb
+    }
+
+    private fun onKeyPress(key: String) {
+        when (key) {
+            "BS" -> {
+                val text = activeInput.text
+                val pos = activeInput.selectionStart
+                if (pos > 0) text.delete(pos - 1, pos)
+            }
+            "↵" -> runInput()
+            "SPACE" -> activeInput.text.insert(activeInput.selectionStart, " ")
+            "SHIFT" -> {
+                isShiftOn = !isShiftOn
+            }
+            else -> {
+                val c = if (isShiftOn) key.uppercase() else key.lowercase()
+                activeInput.text.insert(activeInput.selectionStart, c)
+                if (isShiftOn) isShiftOn = false
+            }
+        }
     }
 
 
@@ -294,15 +403,29 @@ class OverlayService : Service() {
     fun appendOutput(text: String) {
         mainHandler.post {
             if (!::terminalContainer.isInitialized) return@post
+
+            // 履歴に追加
+            outputHistory.add(text)
+
+            // 履歴パネル用TextView
             val tv = TextView(this).apply {
                 setTextColor(android.graphics.Color.GREEN)
-                textSize = 12f
+                textSize = 11f
                 typeface = android.graphics.Typeface.MONOSPACE
                 setTextIsSelectable(true)
                 this.text = text
             }
             terminalContainer.addView(tv)
-            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
+            if (historyExpanded) {
+                scrollView.post { scrollView.fullScroll(android.view.View.FOCUS_DOWN) }
+            }
+
+            // 最新2行を更新
+            val size = outputHistory.size
+            if (::recentLine1.isInitialized && ::recentLine2.isInitialized) {
+                recentLine1.text = if (size >= 2) outputHistory[size - 2] else ""
+                recentLine2.text = if (size >= 1) outputHistory[size - 1] else ""
+            }
         }
     }
 
@@ -458,6 +581,26 @@ class OverlayService : Service() {
     // ======================================================
     // 通知
     // ======================================================
+
+    private fun termKey(
+        label: String,
+        bgColor: Int = android.graphics.Color.parseColor("#333333"),
+        onClick: () -> Unit
+    ): android.widget.Button {
+        return android.widget.Button(this).apply {
+            text = label
+            textSize = 10f
+            setTextColor(android.graphics.Color.WHITE)
+            setBackgroundColor(bgColor)
+            setPadding(8, 4, 8, 4)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(2, 0, 2, 0)
+            }
+            setOnClickListener { onClick() }
+        }
+    }
 
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
