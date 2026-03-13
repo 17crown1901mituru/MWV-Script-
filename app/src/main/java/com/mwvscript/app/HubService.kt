@@ -194,6 +194,11 @@ class HubService : Service() {
         // ctx = HubService自身（Packages.android.content.ContextとしてJSから使用可能）
         ScriptableObject.putProperty(scope, "ctx", this)
 
+        // actCtx = MainActivityのContext（AlertDialog等に使用）
+        MainActivity.instance?.let {
+            ScriptableObject.putProperty(scope, "actCtx", it)
+        }
+
         // pkg namespace（将来的にはutils.*をここに追加）
         val pkg = cx.newObject(scope) as ScriptableObject
         ScriptableObject.putProperty(scope, "pkg", pkg)
