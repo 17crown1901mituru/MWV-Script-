@@ -290,16 +290,15 @@ class HubService : Service() {
             override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
                 val fn    = args.getOrNull(0) as? org.mozilla.javascript.Function ?: return RhinoContext.getUndefinedValue()
                 val delay = (args.getOrNull(1) as? Number)?.toLong() ?: 0L
-                val back  = args.getOrNull(2) as? Boolean ?: false
-                if (back) {
-                    mainHandler.postDelayed({
-                        Thread { try { fn.call(cx, scope, scope, emptyArray()) } catch (e: Exception) { Log.e(TAG, "setTimeout: ${e.message}") } }.start()
-                    }, delay)
-                } else {
-                    mainHandler.postDelayed({
-                        try { fn.call(cx, scope, scope, emptyArray()) } catch (e: Exception) { Log.e(TAG, "setTimeout: ${e.message}") }
-                    }, delay)
-                }
+                mainHandler.postDelayed({
+                    Thread {
+                        val cx2 = RhinoContext.enter()
+                        cx2.optimizationLevel = -1
+                        try { fn.call(cx2, scope, scope, emptyArray()) }
+                        catch (e: Exception) { Log.e(TAG, "setTimeout: ${e.message}") }
+                        finally { RhinoContext.exit() }
+                    }.start()
+                }, delay)
                 return RhinoContext.getUndefinedValue()
             }
         })
@@ -309,21 +308,21 @@ class HubService : Service() {
             override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
                 val fn       = args.getOrNull(0) as? org.mozilla.javascript.Function ?: return RhinoContext.getUndefinedValue()
                 val interval = (args.getOrNull(1) as? Number)?.toLong() ?: 1000L
-                val back     = args.getOrNull(2) as? Boolean ?: false
                 var stopped  = false
                 val runnable = object : Runnable {
                     override fun run() {
                         if (stopped) return
-                        if (back) {
-                            Thread { try { fn.call(cx, scope, scope, emptyArray()) } catch (e: Exception) { Log.e(TAG, "setInterval: ${e.message}") } }.start()
-                        } else {
-                            try { fn.call(cx, scope, scope, emptyArray()) } catch (e: Exception) { Log.e(TAG, "setInterval: ${e.message}") }
-                        }
+                        Thread {
+                            val cx2 = RhinoContext.enter()
+                            cx2.optimizationLevel = -1
+                            try { fn.call(cx2, scope, scope, emptyArray()) }
+                            catch (e: Exception) { Log.e(TAG, "setInterval: ${e.message}") }
+                            finally { RhinoContext.exit() }
+                        }.start()
                         if (!stopped) mainHandler.postDelayed(this, interval)
                     }
                 }
                 mainHandler.postDelayed(runnable, interval)
-                // 戻り値: .stop()で停止できるオブジェクト
                 val handle = cx.newObject(scope) as ScriptableObject
                 ScriptableObject.putProperty(handle, "stop", object : BaseFunction() {
                     override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
@@ -339,8 +338,13 @@ class HubService : Service() {
         ScriptableObject.putProperty(scope, "bThread", object : BaseFunction() {
             override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
                 val fn = args.getOrNull(0) as? org.mozilla.javascript.Function ?: return RhinoContext.getUndefinedValue()
-                val t = Thread { try { fn.call(cx, scope, scope, emptyArray()) } catch (e: Exception) { Log.e(TAG, "bThread: ${e.message}") } }
-                t.start()
+                Thread {
+                    val cx2 = RhinoContext.enter()
+                    cx2.optimizationLevel = -1
+                    try { fn.call(cx2, scope, scope, emptyArray()) }
+                    catch (e: Exception) { Log.e(TAG, "bThread: ${e.message}") }
+                    finally { RhinoContext.exit() }
+                }.start()
                 return RhinoContext.getUndefinedValue()
             }
         })
@@ -351,10 +355,18 @@ class HubService : Service() {
                 val bg   = args.getOrNull(0) as? org.mozilla.javascript.Function ?: return RhinoContext.getUndefinedValue()
                 val post = args.getOrNull(1) as? org.mozilla.javascript.Function
                 Thread {
-                    try { bg.call(cx, scope, scope, emptyArray()) } catch (e: Exception) { Log.e(TAG, "bTask bg: ${e.message}") }
+                    val cx2 = RhinoContext.enter()
+                    cx2.optimizationLevel = -1
+                    try { bg.call(cx2, scope, scope, emptyArray()) }
+                    catch (e: Exception) { Log.e(TAG, "bTask bg: ${e.message}") }
+                    finally { RhinoContext.exit() }
                     if (post != null) {
                         mainHandler.post {
-                            try { post.call(cx, scope, scope, emptyArray()) } catch (e: Exception) { Log.e(TAG, "bTask post: ${e.message}") }
+                            val cx3 = RhinoContext.enter()
+                            cx3.optimizationLevel = -1
+                            try { post.call(cx3, scope, scope, emptyArray()) }
+                            catch (e: Exception) { Log.e(TAG, "bTask post: ${e.message}") }
+                            finally { RhinoContext.exit() }
                         }
                     }
                 }.start()
