@@ -247,6 +247,13 @@ class MainActivity : AppCompatActivity() {
             }
         })
 
+        // DRAWER
+        actionRow.addView(extraKey("DRAWER", android.graphics.Color.parseColor("#003355")) {
+            HubService.instance?.executeAsync(
+                "if(typeof drawer!=='undefined') drawer.toggle();"
+            )
+        })
+
         // RESET（スコープリセット）
         actionRow.addView(extraKey("RESET", android.graphics.Color.parseColor("#553300")) {
             appendOutput("再起動が必要です。")
