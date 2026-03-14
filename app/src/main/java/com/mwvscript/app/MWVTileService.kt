@@ -46,12 +46,44 @@ class MWVTileService : TileService() {
     // タイルをタップしたとき
     override fun onClick() {
         super.onClick()
+
+        // ステータスバーを閉じる
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                val sbm = getSystemService(android.app.StatusBarManager::class.java)
+                sbm?.collapsePanels()
+            } else {
+                @Suppress("DEPRECATION")
+                val intent = android.content.Intent("android.intent.action.CLOSE_SYSTEM_DIALOGS")
+                sendBroadcast(intent)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MWVTile", "collapse: ${e.message}")
+        }
+
+        // ドロワー連動：isRunningをdrawer.isOpen()と同期
+        val drawerOpen = try {
+            val scope = HubService.rhinoScope
+            val drawerObj = scope?.get("drawer", scope)
+            if (drawerObj is org.mozilla.javascript.Scriptable) {
+                val isOpenFn = drawerObj.get("isOpen", drawerObj)
+                if (isOpenFn is org.mozilla.javascript.Function) {
+                    val cx2 = org.mozilla.javascript.Context.enter()
+                    cx2.optimizationLevel = -1
+                    val result = isOpenFn.call(cx2, scope, drawerObj, emptyArray())
+                    org.mozilla.javascript.Context.exit()
+                    result == true || result?.toString() == "true"
+                } else false
+            } else false
+        } catch (e: Exception) { false }
+
+        isRunning = drawerOpen
+
         if (isRunning) {
-            // 実行中 → 停止
             stopScript()
         } else {
-            // 停止中 → 実行
             runScript()
+            isRunning = true
         }
         updateTile()
     }
