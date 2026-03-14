@@ -49,14 +49,10 @@ class MWVTileService : TileService() {
 
         // ステータスバーを閉じる
         try {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                val sbm = getSystemService(android.app.StatusBarManager::class.java)
-                sbm?.collapsePanels()
-            } else {
-                @Suppress("DEPRECATION")
-                val intent = android.content.Intent("android.intent.action.CLOSE_SYSTEM_DIALOGS")
-                sendBroadcast(intent)
-            }
+            @Suppress("DEPRECATION")
+            val intent = android.content.Intent("android.intent.action.CLOSE_SYSTEM_DIALOGS")
+            @Suppress("DEPRECATION")
+            sendBroadcast(intent)
         } catch (e: Exception) {
             android.util.Log.e("MWVTile", "collapse: ${e.message}")
         }
