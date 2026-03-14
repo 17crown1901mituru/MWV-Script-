@@ -15,9 +15,13 @@ class OverlayService : Service() {
 
     companion object {
         var instance: OverlayService? = null
-        const val CHANNEL_ID = "mwv_overlay"
+        const val CHANNEL_ID = "mwv_hub"  // HubServiceと同じチャンネルに統合
         const val NOTIF_ID = 1002
-        const val ACTION_TOGGLE = "com.mwvscript.app.OVERLAY_TOGGLE"
+        const val ACTION_TOGGLE    = "com.mwvscript.app.OVERLAY_TOGGLE"
+        const val ACTION_NOTIF_RUN = "com.mwvscript.app.NOTIF_RUN"
+        const val EXTRA_NOTIF_SCRIPT = "notif_script"
+
+        var lastOutput: String = "待機中"
 
         fun toggle(context: Context) {
             val intent = Intent(context, OverlayService::class.java).apply {
@@ -41,7 +45,7 @@ class OverlayService : Service() {
         super.onCreate()
         instance = this
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        createNotificationChannel()
+        // HubServiceと同じ通知チャンネルを使用（独自チャンネル不要）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIF_ID, buildNotification(),
                 android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
@@ -52,8 +56,12 @@ class OverlayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_TOGGLE) {
-            if (isShowing) hideOverlay() else showOverlay()
+        when (intent?.action) {
+            ACTION_TOGGLE -> if (isShowing) hideOverlay() else showOverlay()
+            ACTION_NOTIF_RUN -> {
+                val script = intent.getStringExtra(EXTRA_NOTIF_SCRIPT) ?: return START_STICKY
+                HubService.instance?.executeAsync(script)
+            }
         }
         return START_STICKY
     }
@@ -291,6 +299,8 @@ class OverlayService : Service() {
     // ======================================================
 
     fun appendOutput(text: String) {
+        lastOutput = text
+        updateNotification()
         mainHandler.post {
             if (!::terminalContainer.isInitialized) return@post
             val tv = TextView(this).apply {
@@ -734,28 +744,42 @@ class OverlayService : Service() {
     // 通知
     // ======================================================
 
-    private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID, "MWV Overlay",
-            NotificationManager.IMPORTANCE_LOW
-        ).apply { setShowBadge(false) }
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-    }
-
     private fun buildNotification(): Notification {
-        val toggleIntent = Intent(this, OverlayService::class.java).apply {
-            action = ACTION_TOGGLE
-        }
-        val togglePi = PendingIntent.getService(
-            this, 0, toggleIntent,
+        // メインアクティビティ起動
+        val mainIntent = packageManager.getLaunchIntentForPackage(packageName) ?: Intent()
+        val mainPi = PendingIntent.getActivity(
+            this, 0, mainIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val label = if (isShowing) "ターミナルを隠す" else "ターミナルを表示"
+
+        // JS実行: MainActivityを開いてJS入力
+        val jsIntent = Intent(this, MainActivity::class.java).apply {
+            action = "com.mwvscript.app.OPEN_INPUT"
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        val jsPi = PendingIntent.getActivity(
+            this, 1, jsIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // ドロワー開閉
+        val drawerScript = "if(typeof drawer!=='undefined') drawer.toggle();"
+        val drawerIntent = Intent(this, OverlayService::class.java).apply {
+            action = ACTION_NOTIF_RUN
+            putExtra(EXTRA_NOTIF_SCRIPT, drawerScript)
+        }
+        val drawerPi = PendingIntent.getService(
+            this, 2, drawerIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("MWV Script")
-            .setContentText("オーバーレイターミナル")
+            .setContentText(lastOutput)
             .setSmallIcon(android.R.drawable.ic_menu_manage)
-            .addAction(android.R.drawable.ic_menu_manage, label, togglePi)
+            .setContentIntent(mainPi)
+            .addAction(android.R.drawable.ic_menu_edit, "JS実行", jsPi)
+            .addAction(android.R.drawable.ic_menu_manage, "ドロワー", drawerPi)
             .setOngoing(true)
             .build()
     }
