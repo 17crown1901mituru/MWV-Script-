@@ -210,6 +210,20 @@ class HubService : Service() {
                 Log.d(TAG, msg)
                 mainHandler.post {
                     MainActivity.instance?.printLine(msg)
+                    OverlayService.instance?.appendOutput(msg)
+                    // drawerのAPIタブにも流す
+                    try {
+                        val drawerObj = scope.get("drawer", scope)
+                        if (drawerObj is org.mozilla.javascript.Scriptable) {
+                            val printFn = drawerObj.get("print", drawerObj)
+                            if (printFn is org.mozilla.javascript.Function) {
+                                val cx2 = RhinoContext.enter()
+                                cx2.optimizationLevel = -1
+                                printFn.call(cx2, scope, drawerObj, arrayOf(msg))
+                                RhinoContext.exit()
+                            }
+                        }
+                    } catch (_: Exception) {}
                 }
                 return RhinoContext.getUndefinedValue()
             }
