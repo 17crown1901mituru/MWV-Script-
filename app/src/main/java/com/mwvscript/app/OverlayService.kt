@@ -417,6 +417,21 @@ class OverlayService : Service() {
         // web.open(url, sessionId?)
         ScriptableObject.putProperty(web, "open", object : org.mozilla.javascript.BaseFunction() {
             override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                // drawer.isWebViewEnabled()チェック
+                try {
+                    val drawerObj = scope.get("drawer", scope)
+                    if (drawerObj is org.mozilla.javascript.Scriptable) {
+                        val fn = drawerObj.get("isWebViewEnabled", drawerObj)
+                        if (fn is org.mozilla.javascript.Function) {
+                            val result = fn.call(cx, scope, drawerObj, emptyArray())
+                            if (result == false || result?.toString() == "false") {
+                                android.util.Log.d("MWVScript", "web.open: WebViewがOFFのためブロック")
+                                return org.mozilla.javascript.Context.getUndefinedValue()
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+
                 val url       = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "about:blank")
                 val sessionId = if (args.size > 1) org.mozilla.javascript.Context.toString(args[1])
                                 else WebViewActivity.DEFAULT_SESSION
