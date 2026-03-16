@@ -20,37 +20,43 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # drawable/ic_launcher.xml が存在しない場合に備えてPNGを生成
-      - name: Generate launcher icon if missing
+      # 必須resファイルが欠けている場合に自動生成
+      - name: Generate missing res files
         run: |
+          # strings.xml
+          STRINGS="app/src/main/res/values/strings.xml"
+          mkdir -p "$(dirname $STRINGS)"
+          if [ ! -f "$STRINGS" ]; then
+            cat > "$STRINGS" << 'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MWV Script</string>
+    <string name="accessibility_service_description">MWV Scriptが他のアプリの画面読み取りと操作を行うために使用します。</string>
+</resources>
+EOF
+            echo "Generated strings.xml"
+          fi
+
+          # drawable/ic_launcher
           DRAWABLE_DIR="app/src/main/res/drawable"
           mkdir -p "$DRAWABLE_DIR"
           if [ ! -f "$DRAWABLE_DIR/ic_launcher.xml" ] && [ ! -f "$DRAWABLE_DIR/ic_launcher.png" ]; then
-            sudo apt-get install -y imagemagick 2>/dev/null || true
-            convert -size 108x108 xc:#0a0a0f \
-              -fill '#7c6aff' -draw "rectangle 20,30 88,78" \
-              -fill '#0a0a0f' -draw "rectangle 28,42 50,48" \
-              -fill '#0a0a0f' -draw "rectangle 28,54 65,60" \
-              "$DRAWABLE_DIR/ic_launcher.png" 2>/dev/null || \
             python3 -c "
-          import struct, zlib
-          def png_1x1(r,g,b):
-              raw = bytes([0,r,g,b,255])
-              compressed = zlib.compress(raw)
-              chunks = b'\\x89PNG\\r\\n\\x1a\\n'
-              def chunk(t,d): c=struct.pack('>I',len(d))+t+d; return c+struct.pack('>I',zlib.crc32(c[4:])&0xffffffff)
-              chunks += chunk(b'IHDR', struct.pack('>IIBBBBB',1,1,8,2,0,0,0))
-              chunks += chunk(b'IDAT', compressed)
-              chunks += chunk(b'IEND', b'')
-              return chunks
-          open('$DRAWABLE_DIR/ic_launcher.png','wb').write(png_1x1(124,106,255))
-          "
+import struct, zlib
+def make_png(w, h, r, g, b):
+    raw = b''.join(bytes([0] + [r,g,b,255]*w) for _ in range(h))
+    def chunk(t, d):
+        c = struct.pack('>I', len(d)) + t + d
+        return c + struct.pack('>I', zlib.crc32(c[4:]) & 0xffffffff)
+    data = b'\x89PNG\r\n\x1a\n'
+    data += chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
+    data += chunk(b'IDAT', zlib.compress(raw))
+    data += chunk(b'IEND', b'')
+    return data
+open('$DRAWABLE_DIR/ic_launcher.png','wb').write(make_png(108,108,124,106,255))
+"
             echo "Generated ic_launcher.png"
-          else
-            echo "ic_launcher already exists, skipping"
           fi
-
-      # Manifest の icon 参照先を drawable に統一（XMLもPNGも同じdrawableに置く）
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
