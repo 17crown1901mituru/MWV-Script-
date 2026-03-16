@@ -184,15 +184,18 @@
         </service>
 
         <!-- BroadcastReceiver -->
-        <receiver
-            android:name=".BootReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="com.mwvscript.app.UPDATE_UI" />
-            </intent-filter>
-        </receiver>
+       <receiver
+    android:name=".MWVDeviceAdminReceiver"
+    android:label="MWV Admin"
+    android:permission="android.permission.BIND_DEVICE_ADMIN"
+    android:exported="true">
+    <meta-data
+        android:name="android.app.device_admin"
+        android:resource="@xml/device_admin_rules" />
+    <intent-filter>
+        <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+    </intent-filter>
+</receiver>
 
         <!-- ContentProvider: rjs間データ共有 -->
         <provider
