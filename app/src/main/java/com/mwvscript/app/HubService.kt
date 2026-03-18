@@ -420,6 +420,76 @@ class HubService : Service() {
             }
         })
 
+        // ---- crypto オブジェクト（ProtectStar Extended AES 512bit/24rounds） ----
+        val cxCrypto = RhinoContext.enter()
+        cxCrypto.optimizationLevel = -1
+        val crypto = cxCrypto.newObject(scope) as ScriptableObject
+        RhinoContext.exit()
+
+        // crypto.encrypt(password, plaintext, keySize?) → Base64文字列
+        ScriptableObject.putProperty(crypto, "encrypt", object : BaseFunction() {
+            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
+                val password  = RhinoContext.toString(args.getOrNull(0) ?: "")
+                val plaintext = RhinoContext.toString(args.getOrNull(1) ?: "")
+                val keySize   = (args.getOrNull(2) as? Number)?.toInt()?.let {
+                    when { it <= 16 -> 16; it <= 32 -> 32; else -> 64 }
+                } ?: 32
+                return try { CryptoService.encrypt(password, plaintext, keySize) }
+                catch (e: Exception) { Log.e(TAG, "crypto.encrypt: ${e.message}"); "" }
+            }
+        })
+
+        // crypto.decrypt(password, base64, keySize?) → plaintext
+        ScriptableObject.putProperty(crypto, "decrypt", object : BaseFunction() {
+            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
+                val password = RhinoContext.toString(args.getOrNull(0) ?: "")
+                val base64   = RhinoContext.toString(args.getOrNull(1) ?: "")
+                val keySize  = (args.getOrNull(2) as? Number)?.toInt()?.let {
+                    when { it <= 16 -> 16; it <= 32 -> 32; else -> 64 }
+                } ?: 32
+                return try { CryptoService.decrypt(password, base64, keySize) }
+                catch (e: Exception) { Log.e(TAG, "crypto.decrypt: ${e.message}"); "" }
+            }
+        })
+
+        ScriptableObject.putProperty(scope, "crypto", crypto)
+
+        // ---- shred オブジェクト（ASDA 4パス安全消去） ----
+        val cxShred = RhinoContext.enter()
+        cxShred.optimizationLevel = -1
+        val shred = cxShred.newObject(scope) as ScriptableObject
+        RhinoContext.exit()
+
+        // shred.file(path) → boolean（同期）
+        ScriptableObject.putProperty(shred, "file", object : BaseFunction() {
+            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
+                val path = RhinoContext.toString(args.getOrNull(0) ?: "")
+                return try { CryptoService.shredFile(path) }
+                catch (e: Exception) { Log.e(TAG, "shred.file: ${e.message}"); false }
+            }
+        })
+
+        // shred.fileAsync(path, callback?) → 非同期
+        ScriptableObject.putProperty(shred, "fileAsync", object : BaseFunction() {
+            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
+                val path     = RhinoContext.toString(args.getOrNull(0) ?: "")
+                val callback = args.getOrNull(1) as? Function
+                Thread {
+                    val result = try { CryptoService.shredFile(path) } catch (e: Exception) { false }
+                    if (callback != null) {
+                        val cx2 = RhinoContext.enter()
+                        cx2.optimizationLevel = -1
+                        try     { callback.call(cx2, scope, scope, arrayOf(result)) }
+                        catch (e: Exception) { Log.e(TAG, "shred.fileAsync cb: ${e.message}") }
+                        finally { RhinoContext.exit() }
+                    }
+                }.start()
+                return RhinoContext.getUndefinedValue()
+            }
+        })
+
+        ScriptableObject.putProperty(scope, "shred", shred)
+
         Log.d(TAG, "標準ブリッジ注入完了")
     }
 
