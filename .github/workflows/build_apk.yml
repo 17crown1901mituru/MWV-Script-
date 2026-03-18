@@ -20,43 +20,6 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # 必須resファイルが欠けている場合に自動生成
-      - name: Generate missing res files
-        run: |
-          # strings.xml
-          STRINGS="app/src/main/res/values/strings.xml"
-          mkdir -p "$(dirname $STRINGS)"
-          if [ ! -f "$STRINGS" ]; then
-            cat > "$STRINGS" << 'EOF'
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">MWV Script</string>
-    <string name="accessibility_service_description">MWV Scriptが他のアプリの画面読み取りと操作を行うために使用します。</string>
-</resources>
-EOF
-            echo "Generated strings.xml"
-          fi
-
-          # drawable/ic_launcher
-          DRAWABLE_DIR="app/src/main/res/drawable"
-          mkdir -p "$DRAWABLE_DIR"
-          if [ ! -f "$DRAWABLE_DIR/ic_launcher.xml" ] && [ ! -f "$DRAWABLE_DIR/ic_launcher.png" ]; then
-            python3 -c "
-import struct, zlib
-def make_png(w, h, r, g, b):
-    raw = b''.join(bytes([0] + [r,g,b,255]*w) for _ in range(h))
-    def chunk(t, d):
-        c = struct.pack('>I', len(d)) + t + d
-        return c + struct.pack('>I', zlib.crc32(c[4:]) & 0xffffffff)
-    data = b'\x89PNG\r\n\x1a\n'
-    data += chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
-    data += chunk(b'IDAT', zlib.compress(raw))
-    data += chunk(b'IEND', b'')
-    return data
-open('$DRAWABLE_DIR/ic_launcher.png','wb').write(make_png(108,108,124,106,255))
-"
-            echo "Generated ic_launcher.png"
-          fi
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
@@ -70,6 +33,20 @@ open('$DRAWABLE_DIR/ic_launcher.png','wb').write(make_png(108,108,124,106,255))
             ~/.gradle/wrapper
           key: gradle-${{ hashFiles('**/*.gradle*') }}
           restore-keys: gradle-
+
+      # strings.xml が存在しない場合のみ生成
+      - name: Ensure strings.xml
+        run: |
+          mkdir -p app/src/main/res/values
+          if [ ! -f app/src/main/res/values/strings.xml ]; then
+            cat > app/src/main/res/values/strings.xml << 'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MWV Script</string>
+    <string name="accessibility_service_description">MWV Scriptが他のアプリの画面読み取りと操作を行うために使用します。</string>
+</resources>
+EOF
+          fi
 
       - name: Build debug APK
         run: gradle assembleDebug --stacktrace
