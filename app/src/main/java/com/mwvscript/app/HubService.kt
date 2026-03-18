@@ -291,7 +291,7 @@ class HubService : Service() {
         // ---- setTimeout ----
         ScriptableObject.putProperty(scope, "setTimeout", object : BaseFunction() {
             override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val fn    = args.getOrNull(0) as? Function ?: return RhinoContext.getUndefinedValue()
+                val fn    = args.getOrNull(0) as? org.mozilla.javascript.Function ?: return RhinoContext.getUndefinedValue()
                 val delay = (args.getOrNull(1) as? Number)?.toLong() ?: 0L
                 mainHandler.postDelayed({
                     Thread {
@@ -309,7 +309,7 @@ class HubService : Service() {
         // ---- setInterval ----
         ScriptableObject.putProperty(scope, "setInterval", object : BaseFunction() {
             override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val fn       = args.getOrNull(0) as? Function ?: return RhinoContext.getUndefinedValue()
+                val fn       = args.getOrNull(0) as? org.mozilla.javascript.Function ?: return RhinoContext.getUndefinedValue()
                 val interval = (args.getOrNull(1) as? Number)?.toLong() ?: 1000L
                 var stopped  = false
                 val runnable = object : Runnable {
@@ -340,7 +340,7 @@ class HubService : Service() {
         // ---- bThread ----
         ScriptableObject.putProperty(scope, "bThread", object : BaseFunction() {
             override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val fn = args.getOrNull(0) as? Function ?: return RhinoContext.getUndefinedValue()
+                val fn = args.getOrNull(0) as? org.mozilla.javascript.Function ?: return RhinoContext.getUndefinedValue()
                 Thread {
                     val cx2 = RhinoContext.enter()
                     cx2.optimizationLevel = -1
@@ -355,8 +355,8 @@ class HubService : Service() {
         // ---- bTask (doInBackground → onPostExecute) ----
         ScriptableObject.putProperty(scope, "bTask", object : BaseFunction() {
             override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val bg   = args.getOrNull(0) as? Function ?: return RhinoContext.getUndefinedValue()
-                val post = args.getOrNull(1) as? Function
+                val bg   = args.getOrNull(0) as? org.mozilla.javascript.Function ?: return RhinoContext.getUndefinedValue()
+                val post = args.getOrNull(1) as? org.mozilla.javascript.Function
                 Thread {
                     val cx2 = RhinoContext.enter()
                     cx2.optimizationLevel = -1
@@ -380,7 +380,7 @@ class HubService : Service() {
         // ---- runOnUIThread ----
         ScriptableObject.putProperty(scope, "runOnUIThread", object : BaseFunction() {
             override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val fn = args.getOrNull(0) as? Function ?: return RhinoContext.getUndefinedValue()
+                val fn = args.getOrNull(0) as? org.mozilla.javascript.Function ?: return RhinoContext.getUndefinedValue()
                 mainHandler.post {
                     try     { fn.call(cx, scope, scope, emptyArray()) }
                     catch (e: Exception) { Log.e(TAG, "runOnUIThread: ${e.message}") }
@@ -473,7 +473,7 @@ class HubService : Service() {
         ScriptableObject.putProperty(shred, "fileAsync", object : BaseFunction() {
             override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
                 val path     = RhinoContext.toString(args.getOrNull(0) ?: "")
-                val callback = args.getOrNull(1) as? Function
+                val callback = args.getOrNull(1) as? org.mozilla.javascript.Function
                 Thread {
                     val result = try { CryptoService.shredFile(path) } catch (e: Exception) { false }
                     if (callback != null) {
