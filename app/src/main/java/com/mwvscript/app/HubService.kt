@@ -1,521 +1,262 @@
-package com.mwvscript.app
+﻿2026-03-18T12:11:11.6408433Z ##[group]Run gradle assembleDebug --stacktrace
+gradle assembleDebug --stacktrace
+shell: /usr/bin/bash -e {0}
+env:
+  JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+  JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
 
-import android.app.*
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.os.*
-import android.util.Log
-import androidx.core.app.NotificationCompat
-import com.faendir.rhino_android.RhinoAndroidHelper
-import org.mozilla.javascript.*
-import org.mozilla.javascript.Context as RhinoContext
+Welcome to Gradle 8.2!
 
-class HubService : Service() {
+Here are the highlights of this release:
+ - Kotlin DSL: new reference documentation, assignment syntax by default
+ - Kotlin DSL is now the default with Gradle init
+ - Improved suggestions to resolve errors in console output
 
-    companion object {
-        const val TAG          = "HubService"
-        const val CHANNEL_ID   = "mwv_hub"
-        const val NOTIF_ID     = 1001
-        const val ACTION_EXECUTE = "com.mwvscript.app.EXECUTE"
-        const val ACTION_BOOT    = "com.mwvscript.app.INITIAL_BOOT"
-        const val EXTRA_SCRIPT   = "script"
-        const val EXTRA_PATH     = "path"
+For more details see https://docs.gradle.org/8.2/release-notes.html
 
-        var instance: HubService? = null
-        var rhinoScope: Scriptable? = null
-        var isReady = false
-    }
+Starting a Gradle Daemon (subsequent builds will be faster)
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:generateDebugResValues
+> Task :app:checkDebugAarMetadata
+> Task :app:mapDebugSourceSetPaths
+> Task :app:generateDebugResources
+> Task :app:packageDebugResources
+> Task :app:mergeDebugResources
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug
+> Task :app:parseDebugLocalResources
 
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var rhinoContext: RhinoContext? = null
+> Task :app:processDebugMainManifest
+/home/runner/work/MWV-Script-/MWV-Script-/app/src/main/AndroidManifest.xml:123:5-253:19 Warning:
+	application@android:allowBackup was tagged at AndroidManifest.xml:123 to replace other declarations but no other declaration present
 
-    private val executeReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val script = intent.getStringExtra(EXTRA_SCRIPT) ?: return
-            executeAsync(script)
-        }
-    }
+> Task :app:processDebugManifest
+> Task :app:javaPreCompileDebug
+> Task :app:mergeDebugShaders
+> Task :app:compileDebugShaders NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets
+> Task :app:compressDebugAssets
+> Task :app:processDebugManifestForPackage
+> Task :app:desugarDebugFileDependencies
+> Task :app:processDebugResources
+> Task :app:checkDebugDuplicateClasses
+> Task :app:compileDebugKotlin
+> Task :app:mergeExtDexDebug
 
-    // =========================================================
-    // ライフサイクル
-    // =========================================================
+e: file:///home/runner/work/MWV-Script-/MWV-Script-/app/src/main/java/com/mwvscript/app/CryptoService.kt:157:89 Unresolved reference. None of the following candidates is applicable because of receiver type mismatch: 
+> Task :app:compileDebugKotlin FAILED
+public inline infix fun BigInteger.xor(other: BigInteger): BigInteger defined in kotlin
+e: file:///home/runner/work/MWV-Script-/MWV-Script-/app/src/main/java/com/mwvscript/app/CryptoService.kt:176:86 Unresolved reference. None of the following candidates is applicable because of receiver type mismatch: 
+public inline infix fun BigInteger.xor(other: BigInteger): BigInteger defined in kotlin
+e: file:///home/runner/work/MWV-Script-/MWV-Script-/app/src/main/java/com/mwvscript/app/CryptoService.kt:241:58 Unresolved reference. None of the following candidates is applicable because of receiver type mismatch: 
+public inline infix fun BigInteger.xor(other: BigInteger): BigInteger defined in kotlin
+e: file:///home/runner/work/MWV-Script-/MWV-Script-/app/src/main/java/com/mwvscript/app/CryptoService.kt:251:59 Unresolved reference. None of the following candidates is applicable because of receiver type mismatch: 
+public inline infix fun BigInteger.xor(other: BigInteger): BigInteger defined in kotlin
+e: file:///home/runner/work/MWV-Script-/MWV-Script-/app/src/main/java/com/mwvscript/app/CryptoService.kt:328:53 Unresolved reference. None of the following candidates is applicable because of receiver type mismatch: 
+public inline infix fun BigInteger.xor(other: BigInteger): BigInteger defined in kotlin
 
-    override fun onCreate() {
-        super.onCreate()
-        instance = this
-        createNotificationChannel()
-        // Xperia電力管理対策：onCreate直後にstartForeground
-        startForeground(NOTIF_ID, buildNotification("MWV Script 起動中..."))
-        registerReceiver(executeReceiver, IntentFilter(ACTION_EXECUTE), RECEIVER_NOT_EXPORTED)
-        Thread { initRhino() }.start()
-    }
+FAILURE: Build failed with an exception.
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_EXECUTE -> {
-                val script = intent.getStringExtra(EXTRA_SCRIPT)
-                val path   = intent.getStringExtra(EXTRA_PATH)
-                when {
-                    script != null -> executeAsync(script)
-                    path   != null -> loadAndExecute(path)
-                }
-            }
-            ACTION_BOOT -> Log.d(TAG, "BOOT intent受信")
-        }
-        return START_STICKY
-    }
+* What went wrong:
+Execution failed for task ':app:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
 
-    override fun onDestroy() {
-        instance = null
-        isReady  = false
-        unregisterReceiver(executeReceiver)
-        try { RhinoContext.exit() } catch (_: Exception) {}
-        rhinoContext = null
-        rhinoScope   = null
-        super.onDestroy()
-    }
+* Try:
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
 
-    override fun onBind(intent: Intent?): IBinder? = null
+* Exception is:
+org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':app:compileDebugKotlin'.
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.lambda$executeIfValid$1(ExecuteActionsTaskExecuter.java:149)
+	at org.gradle.internal.Try$Failure.ifSuccessfulOrElse(Try.java:282)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:147)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:135)
+	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:204)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:199)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:157)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:53)
+	at org.gradle.internal.operations.DefaultBuildOperationExecutor.call(DefaultBuildOperationExecutor.java:73)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:337)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:324)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:317)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:463)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:380)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
+Caused by: org.gradle.workers.internal.DefaultWorkerExecutor$WorkExecutionException: A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+	at org.gradle.workers.internal.DefaultWorkerExecutor$WorkItemExecution.waitForCompletion(DefaultWorkerExecutor.java:283)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.lambda$waitForItemsAndGatherFailures$2(DefaultAsyncWorkTracker.java:130)
+	at org.gradle.internal.Factories$1.create(Factories.java:31)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withoutLocks(DefaultWorkerLeaseService.java:321)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withoutLocks(DefaultWorkerLeaseService.java:304)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withoutLock(DefaultWorkerLeaseService.java:309)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForItemsAndGatherFailures(DefaultAsyncWorkTracker.java:126)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForItemsAndGatherFailures(DefaultAsyncWorkTracker.java:92)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForAll(DefaultAsyncWorkTracker.java:78)
+	at org.gradle.internal.work.DefaultAsyncWorkTracker.waitForCompletion(DefaultAsyncWorkTracker.java:66)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$3.run(TaskExecution.java:256)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:29)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:26)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:157)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.run(DefaultBuildOperationRunner.java:47)
+	at org.gradle.internal.operations.DefaultBuildOperationExecutor.run(DefaultBuildOperationExecutor.java:68)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeAction(TaskExecution.java:233)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeActions(TaskExecution.java:216)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeWithPreviousOutputFiles(TaskExecution.java:199)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.execute(TaskExecution.java:166)
+	at org.gradle.internal.execution.steps.ExecuteStep.executeInternal(ExecuteStep.java:105)
+	at org.gradle.internal.execution.steps.ExecuteStep.access$000(ExecuteStep.java:44)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:59)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:56)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:204)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:199)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:157)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:53)
+	at org.gradle.internal.operations.DefaultBuildOperationExecutor.call(DefaultBuildOperationExecutor.java:73)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:56)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:44)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:67)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:37)
+	at org.gradle.internal.execution.steps.CancelExecutionStep.execute(CancelExecutionStep.java:41)
+	at org.gradle.internal.execution.steps.TimeoutStep.executeWithoutTimeout(TimeoutStep.java:74)
+	at org.gradle.internal.execution.steps.TimeoutStep.execute(TimeoutStep.java:55)
+	at org.gradle.internal.execution.steps.CreateOutputsStep.execute(CreateOutputsStep.java:50)
+	at org.gradle.internal.execution.steps.CreateOutputsStep.execute(CreateOutputsStep.java:28)
+	at org.gradle.internal.execution.steps.CaptureStateAfterExecutionStep.executeDelegateBroadcastingChanges(CaptureStateAfterExecutionStep.java:100)
+	at org.gradle.internal.execution.steps.CaptureStateAfterExecutionStep.execute(CaptureStateAfterExecutionStep.java:72)
+	at org.gradle.internal.execution.steps.CaptureStateAfterExecutionStep.execute(CaptureStateAfterExecutionStep.java:50)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:40)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:29)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeWithoutCache(BuildCacheStep.java:179)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$execute$1(BuildCacheStep.java:70)
+	at org.gradle.internal.Either$Right.fold(Either.java:175)
+	at org.gradle.internal.execution.caching.CachingState.fold(CachingState.java:59)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:68)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:46)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:36)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:25)
+	at org.gradle.internal.execution.steps.RecordOutputsStep.execute(RecordOutputsStep.java:36)
+	at org.gradle.internal.execution.steps.RecordOutputsStep.execute(RecordOutputsStep.java:22)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.executeBecause(SkipUpToDateStep.java:91)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.lambda$execute$2(SkipUpToDateStep.java:55)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:55)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:37)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:65)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:36)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:37)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:27)
+	at org.gradle.internal.execution.steps.ResolveCachingStateStep.execute(ResolveCachingStateStep.java:77)
+	at org.gradle.internal.execution.steps.ResolveCachingStateStep.execute(ResolveCachingStateStep.java:38)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:94)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:49)
+	at org.gradle.internal.execution.steps.CaptureStateBeforeExecutionStep.execute(CaptureStateBeforeExecutionStep.java:71)
+	at org.gradle.internal.execution.steps.CaptureStateBeforeExecutionStep.execute(CaptureStateBeforeExecutionStep.java:45)
+	at org.gradle.internal.execution.steps.SkipEmptyWorkStep.executeWithNonEmptySources(SkipEmptyWorkStep.java:177)
+	at org.gradle.internal.execution.steps.SkipEmptyWorkStep.execute(SkipEmptyWorkStep.java:86)
+	at org.gradle.internal.execution.steps.SkipEmptyWorkStep.execute(SkipEmptyWorkStep.java:53)
+	at org.gradle.internal.execution.steps.RemoveUntrackedExecutionStateStep.execute(RemoveUntrackedExecutionStateStep.java:32)
+	at org.gradle.internal.execution.steps.RemoveUntrackedExecutionStateStep.execute(RemoveUntrackedExecutionStateStep.java:21)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:36)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:23)
+	at org.gradle.internal.execution.steps.CleanupStaleOutputsStep.execute(CleanupStaleOutputsStep.java:75)
+	at org.gradle.internal.execution.steps.CleanupStaleOutputsStep.execute(CleanupStaleOutputsStep.java:41)
+	at org.gradle.internal.execution.steps.AssignWorkspaceStep.lambda$execute$0(AssignWorkspaceStep.java:32)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$4.withWorkspace(TaskExecution.java:293)
+	at org.gradle.internal.execution.steps.AssignWorkspaceStep.execute(AssignWorkspaceStep.java:30)
+	at org.gradle.internal.execution.steps.AssignWorkspaceStep.execute(AssignWorkspaceStep.java:21)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:37)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:27)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:47)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:34)
+	at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:64)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:146)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:135)
+	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:204)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:199)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:157)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:53)
+	at org.gradle.internal.operations.DefaultBuildOperationExecutor.call(DefaultBuildOperationExecutor.java:73)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:337)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:324)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:317)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:463)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:380)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
+Caused by: org.jetbrains.kotlin.gradle.tasks.CompilationErrorException: Compilation error. See log for more details
+	at org.jetbrains.kotlin.gradle.tasks.TasksUtilsKt.throwExceptionIfCompilationFailed(tasksUtils.kt:22)
+	at org.jetbrains.kotlin.compilerRunner.GradleKotlinCompilerWork.run(GradleKotlinCompilerWork.kt:144)
+	at org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction.execute(GradleCompilerRunnerWithWorkers.kt:76)
+	at org.gradle.workers.internal.DefaultWorkerServer.execute(DefaultWorkerServer.java:63)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:66)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1$1.create(NoIsolationWorkerFactory.java:62)
+	at org.gradle.internal.classloader.ClassLoaderUtils.executeInClassloader(ClassLoaderUtils.java:100)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1.lambda$execute$0(NoIsolationWorkerFactory.java:62)
+	at org.gradle.workers.internal.AbstractWorker$1.call(AbstractWorker.java:44)
+	at org.gradle.workers.internal.AbstractWorker$1.call(AbstractWorker.java:41)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:204)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:199)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:66)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:157)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:59)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:53)
+	at org.gradle.internal.operations.DefaultBuildOperationExecutor.call(DefaultBuildOperationExecutor.java:73)
+	at org.gradle.workers.internal.AbstractWorker.executeWrappedInBuildOperation(AbstractWorker.java:41)
+	at org.gradle.workers.internal.NoIsolationWorkerFactory$1.execute(NoIsolationWorkerFactory.java:59)
+	at org.gradle.workers.internal.DefaultWorkerExecutor.lambda$submitWork$0(DefaultWorkerExecutor.java:170)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runExecution(DefaultConditionalExecutionQueue.java:187)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.access$700(DefaultConditionalExecutionQueue.java:120)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner$1.run(DefaultConditionalExecutionQueue.java:162)
+	at org.gradle.internal.Factories$1.create(Factories.java:31)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.withLocks(DefaultWorkerLeaseService.java:249)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:109)
+	at org.gradle.internal.work.DefaultWorkerLeaseService.runAsWorkerThread(DefaultWorkerLeaseService.java:114)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.runBatch(DefaultConditionalExecutionQueue.java:157)
+	at org.gradle.internal.work.DefaultConditionalExecutionQueue$ExecutionRunner.run(DefaultConditionalExecutionQueue.java:126)
+	... 2 more
 
-    // =========================================================
-    // Rhinoエンジン初期化
-    // =========================================================
 
-    private fun initRhino() {
-        try {
-            val helper = RhinoAndroidHelper(this)
-            val cx     = helper.enterContext()
-            cx.optimizationLevel = -1
-            val scope  = ImporterTopLevel(cx)
-
-            rhinoContext = cx
-            rhinoScope   = scope
-
-            // パッケージエイリアス
-            cx.evaluateString(scope, """
-                var android = Packages.android;
-                var java    = Packages.java;
-                var javax   = Packages.javax;
-                var org     = Packages.org;
-                var dalvik  = Packages.dalvik;
-            """.trimIndent(), "<init>", 1, null)
-
-            // 標準ブリッジ注入
-            injectBuiltins(cx, scope)
-
-            // 各サービスのブリッジ注入（起動済みなら即注入）
-            OverlayService.instance?.injectOverlayBridge()
-            MWVAccessibilityService.instance?.injectAccessibilityBridge()
-            MWVNotificationListener.instance?.injectNotifyBridge()
-            MWVTileService.instance?.injectTileBridge()
-
-            isReady = true
-            updateNotification("MWV Script 実行中")
-            Log.d(TAG, "Rhinoエンジン初期化完了")
-
-            runInitScript()
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Rhino初期化失敗: ${e.message}")
-        }
-    }
-
-    private fun runInitScript() {
-        val initFile = java.io.File(getExternalFilesDir(null), "init.rjs")
-        if (!initFile.exists()) {
-            Log.d(TAG, "init.rjs が見つかりません: ${initFile.absolutePath}")
-            return
-        }
-        try {
-            evaluateOnRhinoThread(initFile.readText(), "init.rjs")
-            Log.d(TAG, "init.rjs 実行完了")
-        } catch (e: Exception) {
-            Log.e(TAG, "init.rjs エラー: ${e.message}")
-        }
-    }
-
-    // =========================================================
-    // スクリプト実行
-    // =========================================================
-
-    fun executeAsync(script: String) {
-        Thread { evaluateOnRhinoThread(script, "<exec>") }.start()
-    }
-
-    fun loadAndExecute(path: String) {
-        Thread {
-            val file = if (java.io.File(path).isAbsolute) java.io.File(path)
-                       else java.io.File(getExternalFilesDir(null), path)
-            if (!file.exists()) {
-                Log.e(TAG, "ファイルが見つかりません: ${file.absolutePath}")
-                return@Thread
-            }
-            evaluateOnRhinoThread(file.readText(), file.name)
-        }.start()
-    }
-
-    fun evaluateSync(script: String): String {
-        val scope = rhinoScope ?: return "Error: 未初期化"
-        return try {
-            val cx = RhinoContext.enter()
-            cx.optimizationLevel = -1
-            val result = cx.evaluateString(scope, script, "<eval>", 1, null)
-            RhinoContext.exit()
-            RhinoContext.toString(result)
-        } catch (e: Exception) {
-            "Error: ${e.message}"
-        }
-    }
-
-    private fun evaluateOnRhinoThread(script: String, sourceName: String) {
-        val scope = rhinoScope ?: return
-        try {
-            val cx = RhinoContext.enter()
-            cx.optimizationLevel = -1
-            cx.evaluateString(scope, script, sourceName, 1, null)
-            RhinoContext.exit()
-        } catch (e: Exception) {
-            Log.e(TAG, "[$sourceName] エラー: ${e.message}")
-            OverlayService.instance?.appendOutput("[$sourceName] エラー: ${e.message}")
-        }
-    }
-
-    // =========================================================
-    // 標準ブリッジ注入
-    // =========================================================
-
-    private fun injectBuiltins(cx: RhinoContext, scope: Scriptable) {
-
-        // ctx = HubService（Packages.android.content.ContextとしてJSから使用可能）
-        ScriptableObject.putProperty(scope, "ctx", this)
-
-        // actCtx = MainActivityのContext（AlertDialog等に使用）
-        MainActivity.instance?.let {
-            ScriptableObject.putProperty(scope, "actCtx", it)
-        }
-
-        // pkg namespace
-        val pkg = cx.newObject(scope) as ScriptableObject
-        ScriptableObject.putProperty(scope, "pkg", pkg)
-
-        // ---- print ----
-        ScriptableObject.putProperty(scope, "print", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val msg = args.joinToString(" ") { RhinoContext.toString(it) }
-                Log.d(TAG, msg)
-                mainHandler.post {
-                    MainActivity.instance?.printLine(msg)
-                    OverlayService.instance?.appendOutput(msg)
-                }
-                return RhinoContext.getUndefinedValue()
-            }
-        })
-
-        // ---- popup (Toast) ----
-        ScriptableObject.putProperty(scope, "popup", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val msg = RhinoContext.toString(args.getOrNull(0))
-                mainHandler.post {
-                    android.widget.Toast.makeText(this@HubService, msg, android.widget.Toast.LENGTH_SHORT).show()
-                }
-                return RhinoContext.getUndefinedValue()
-            }
-        })
-
-        // ---- alert ----
-        ScriptableObject.putProperty(scope, "alert", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val msg   = RhinoContext.toString(args.getOrNull(0))
-                val title = if (args.size > 1) RhinoContext.toString(args[1]) else "Alert"
-                val latch = java.util.concurrent.CountDownLatch(1)
-                mainHandler.post {
-                    val act = MainActivity.instance ?: run { latch.countDown(); return@post }
-                    android.app.AlertDialog.Builder(act)
-                        .setTitle(title).setMessage(msg)
-                        .setPositiveButton("OK") { _, _ -> latch.countDown() }
-                        .setOnDismissListener { latch.countDown() }
-                        .show()
-                }
-                latch.await()
-                return RhinoContext.getUndefinedValue()
-            }
-        })
-
-        // ---- prompt ----
-        ScriptableObject.putProperty(scope, "prompt", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val msg     = RhinoContext.toString(args.getOrNull(0))
-                val default = if (args.size > 1) RhinoContext.toString(args[1]) else ""
-                val title   = if (args.size > 2) RhinoContext.toString(args[2]) else "Input"
-                var input: String? = null
-                val latch = java.util.concurrent.CountDownLatch(1)
-                mainHandler.post {
-                    val act = MainActivity.instance ?: run { latch.countDown(); return@post }
-                    val et = android.widget.EditText(act)
-                    et.setText(default)
-                    android.app.AlertDialog.Builder(act)
-                        .setTitle(title).setMessage(msg).setView(et)
-                        .setPositiveButton("OK")     { _, _ -> input = et.text.toString(); latch.countDown() }
-                        .setNegativeButton("Cancel") { _, _ -> latch.countDown() }
-                        .setOnDismissListener { latch.countDown() }
-                        .show()
-                }
-                latch.await()
-                return input ?: RhinoContext.getUndefinedValue()
-            }
-        })
-
-        // ---- confirm ----
-        ScriptableObject.putProperty(scope, "confirm", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val msg   = RhinoContext.toString(args.getOrNull(0))
-                val title = if (args.size > 1) RhinoContext.toString(args[1]) else "Confirm"
-                var result = false
-                val latch  = java.util.concurrent.CountDownLatch(1)
-                mainHandler.post {
-                    val act = MainActivity.instance ?: run { latch.countDown(); return@post }
-                    android.app.AlertDialog.Builder(act)
-                        .setTitle(title).setMessage(msg)
-                        .setPositiveButton("OK")     { _, _ -> result = true; latch.countDown() }
-                        .setNegativeButton("Cancel") { _, _ -> latch.countDown() }
-                        .setOnDismissListener { latch.countDown() }
-                        .show()
-                }
-                latch.await()
-                return result
-            }
-        })
-
-        // ---- setTimeout ----
-        ScriptableObject.putProperty(scope, "setTimeout", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val fn    = args.getOrNull(0) as? org.mozilla.javascript.Function ?: return RhinoContext.getUndefinedValue()
-                val delay = (args.getOrNull(1) as? Number)?.toLong() ?: 0L
-                mainHandler.postDelayed({
-                    Thread {
-                        val cx2 = RhinoContext.enter()
-                        cx2.optimizationLevel = -1
-                        try     { fn.call(cx2, scope, scope, emptyArray()) }
-                        catch (e: Exception) { Log.e(TAG, "setTimeout: ${e.message}") }
-                        finally { RhinoContext.exit() }
-                    }.start()
-                }, delay)
-                return RhinoContext.getUndefinedValue()
-            }
-        })
-
-        // ---- setInterval ----
-        ScriptableObject.putProperty(scope, "setInterval", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val fn       = args.getOrNull(0) as? org.mozilla.javascript.Function ?: return RhinoContext.getUndefinedValue()
-                val interval = (args.getOrNull(1) as? Number)?.toLong() ?: 1000L
-                var stopped  = false
-                val runnable = object : Runnable {
-                    override fun run() {
-                        if (stopped) return
-                        Thread {
-                            val cx2 = RhinoContext.enter()
-                            cx2.optimizationLevel = -1
-                            try     { fn.call(cx2, scope, scope, emptyArray()) }
-                            catch (e: Exception) { Log.e(TAG, "setInterval: ${e.message}") }
-                            finally { RhinoContext.exit() }
-                        }.start()
-                        if (!stopped) mainHandler.postDelayed(this, interval)
-                    }
-                }
-                mainHandler.postDelayed(runnable, interval)
-                val handle = cx.newObject(scope) as ScriptableObject
-                ScriptableObject.putProperty(handle, "stop", object : BaseFunction() {
-                    override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                        stopped = true
-                        return RhinoContext.getUndefinedValue()
-                    }
-                })
-                return handle
-            }
-        })
-
-        // ---- bThread ----
-        ScriptableObject.putProperty(scope, "bThread", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val fn = args.getOrNull(0) as? org.mozilla.javascript.Function ?: return RhinoContext.getUndefinedValue()
-                Thread {
-                    val cx2 = RhinoContext.enter()
-                    cx2.optimizationLevel = -1
-                    try     { fn.call(cx2, scope, scope, emptyArray()) }
-                    catch (e: Exception) { Log.e(TAG, "bThread: ${e.message}") }
-                    finally { RhinoContext.exit() }
-                }.start()
-                return RhinoContext.getUndefinedValue()
-            }
-        })
-
-        // ---- bTask (doInBackground → onPostExecute) ----
-        ScriptableObject.putProperty(scope, "bTask", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val bg   = args.getOrNull(0) as? org.mozilla.javascript.Function ?: return RhinoContext.getUndefinedValue()
-                val post = args.getOrNull(1) as? org.mozilla.javascript.Function
-                Thread {
-                    val cx2 = RhinoContext.enter()
-                    cx2.optimizationLevel = -1
-                    try     { bg.call(cx2, scope, scope, emptyArray()) }
-                    catch (e: Exception) { Log.e(TAG, "bTask bg: ${e.message}") }
-                    finally { RhinoContext.exit() }
-                    if (post != null) {
-                        mainHandler.post {
-                            val cx3 = RhinoContext.enter()
-                            cx3.optimizationLevel = -1
-                            try     { post.call(cx3, scope, scope, emptyArray()) }
-                            catch (e: Exception) { Log.e(TAG, "bTask post: ${e.message}") }
-                            finally { RhinoContext.exit() }
-                        }
-                    }
-                }.start()
-                return RhinoContext.getUndefinedValue()
-            }
-        })
-
-        // ---- runOnUIThread ----
-        ScriptableObject.putProperty(scope, "runOnUIThread", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val fn = args.getOrNull(0) as? org.mozilla.javascript.Function ?: return RhinoContext.getUndefinedValue()
-                mainHandler.post {
-                    try     { fn.call(cx, scope, scope, emptyArray()) }
-                    catch (e: Exception) { Log.e(TAG, "runOnUIThread: ${e.message}") }
-                }
-                return RhinoContext.getUndefinedValue()
-            }
-        })
-
-        // ---- load(path) ----
-        // MWV-Script/ 直下を基準ディレクトリとする
-        val baseDir = android.os.Environment.getExternalStoragePublicDirectory(
-            android.os.Environment.DIRECTORY_DOWNLOADS
-        ).let { java.io.File(it, "MWV-Script") }
-
-        ScriptableObject.putProperty(scope, "load", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val path = RhinoContext.toString(args.getOrNull(0))
-                val file = if (java.io.File(path).isAbsolute) java.io.File(path)
-                           else java.io.File(baseDir, path)
-                if (!file.exists()) {
-                    Log.e(TAG, "load: ファイルが見つかりません: ${file.absolutePath}")
-                    OverlayService.instance?.appendOutput("load: 見つかりません: ${file.absolutePath}")
-                    return RhinoContext.getUndefinedValue()
-                }
-                return try {
-                    val src = file.readText()
-                    val cx2 = RhinoContext.enter()
-                    cx2.optimizationLevel = -1
-                    val result = cx2.evaluateString(scope, src, file.name, 1, null)
-                    RhinoContext.exit()
-                    result
-                } catch (e: Exception) {
-                    Log.e(TAG, "load [${file.name}]: ${e.message}")
-                    OverlayService.instance?.appendOutput("load エラー [${file.name}]: ${e.message}")
-                    RhinoContext.getUndefinedValue()
-                }
-            }
-        })
-
-        // ---- crypto オブジェクト（ProtectStar Extended AES 512bit/24rounds） ----
-        val cxCrypto = RhinoContext.enter()
-        cxCrypto.optimizationLevel = -1
-        val crypto = cxCrypto.newObject(scope) as ScriptableObject
-        RhinoContext.exit()
-
-        // crypto.encrypt(password, plaintext, keySize?) → Base64文字列
-        ScriptableObject.putProperty(crypto, "encrypt", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val password  = RhinoContext.toString(args.getOrNull(0) ?: "")
-                val plaintext = RhinoContext.toString(args.getOrNull(1) ?: "")
-                val keySize   = (args.getOrNull(2) as? Number)?.toInt()?.let {
-                    when { it <= 16 -> 16; it <= 32 -> 32; else -> 64 }
-                } ?: 32
-                return try { CryptoService.encrypt(password, plaintext, keySize) }
-                catch (e: Exception) { Log.e(TAG, "crypto.encrypt: ${e.message}"); "" }
-            }
-        })
-
-        // crypto.decrypt(password, base64, keySize?) → plaintext
-        ScriptableObject.putProperty(crypto, "decrypt", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val password = RhinoContext.toString(args.getOrNull(0) ?: "")
-                val base64   = RhinoContext.toString(args.getOrNull(1) ?: "")
-                val keySize  = (args.getOrNull(2) as? Number)?.toInt()?.let {
-                    when { it <= 16 -> 16; it <= 32 -> 32; else -> 64 }
-                } ?: 32
-                return try { CryptoService.decrypt(password, base64, keySize) }
-                catch (e: Exception) { Log.e(TAG, "crypto.decrypt: ${e.message}"); "" }
-            }
-        })
-
-        ScriptableObject.putProperty(scope, "crypto", crypto)
-
-        // ---- shred オブジェクト（ASDA 4パス安全消去） ----
-        val cxShred = RhinoContext.enter()
-        cxShred.optimizationLevel = -1
-        val shred = cxShred.newObject(scope) as ScriptableObject
-        RhinoContext.exit()
-
-        // shred.file(path) → boolean（同期）
-        ScriptableObject.putProperty(shred, "file", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val path = RhinoContext.toString(args.getOrNull(0) ?: "")
-                return try { CryptoService.shredFile(path) }
-                catch (e: Exception) { Log.e(TAG, "shred.file: ${e.message}"); false }
-            }
-        })
-
-        // shred.fileAsync(path, callback?) → 非同期
-        ScriptableObject.putProperty(shred, "fileAsync", object : BaseFunction() {
-            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
-                val path     = RhinoContext.toString(args.getOrNull(0) ?: "")
-                val callback = args.getOrNull(1) as? org.mozilla.javascript.Function
-                Thread {
-                    val result = try { CryptoService.shredFile(path) } catch (e: Exception) { false }
-                    if (callback != null) {
-                        val cx2 = RhinoContext.enter()
-                        cx2.optimizationLevel = -1
-                        try     { callback.call(cx2, scope, scope, arrayOf(result)) }
-                        catch (e: Exception) { Log.e(TAG, "shred.fileAsync cb: ${e.message}") }
-                        finally { RhinoContext.exit() }
-                    }
-                }.start()
-                return RhinoContext.getUndefinedValue()
-            }
-        })
-
-        ScriptableObject.putProperty(scope, "shred", shred)
-
-        Log.d(TAG, "標準ブリッジ注入完了")
-    }
-
-    // =========================================================
-    // 通知
-    // =========================================================
-
-    private fun createNotificationChannel() {
-        val ch = NotificationChannel(CHANNEL_ID, "MWV Script", NotificationManager.IMPORTANCE_LOW)
-        ch.setShowBadge(false)
-        getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
-    }
-
-    private fun buildNotification(text: String): Notification {
-        val intent = packageManager.getLaunchIntentForPackage(packageName) ?: Intent()
-        val pi = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("MWV Script")
-            .setContentText(text)
-            .setSmallIcon(android.R.drawable.ic_menu_manage)
-            .setContentIntent(pi)
-            .setOngoing(true)
-            .build()
-    }
-
-    private fun updateNotification(text: String) {
-        getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(text))
-    }
-}
+BUILD FAILED in 1m 38s
+20 actionable tasks: 20 executed
+Process completed with exit code 1.
