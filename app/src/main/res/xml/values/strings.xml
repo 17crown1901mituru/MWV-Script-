@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">MWV Script</string>
-    <string name="accessibility_service_description">MWV Scriptが他のアプリの画面読み取りと操作を行うために使用します。</string>
-</resources>
