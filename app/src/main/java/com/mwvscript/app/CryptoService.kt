@@ -154,7 +154,7 @@ object CryptoService {
             val ci = iv.copyOf()
             addCounter(ci, counter++)
             encBlock(ci, roundKeys)
-            for (j in 0 until BLOCKSIZE) result[BLOCKSIZE + i * BLOCKSIZE + j] = (ci[j] xor padded[i * BLOCKSIZE + j])
+            for (j in 0 until BLOCKSIZE) result[BLOCKSIZE + i * BLOCKSIZE + j] = (ci[j] xor padded[i * BLOCKSIZE + j]).toByte()
         }
         return Base64.encodeToString(result, Base64.NO_WRAP)
     }
@@ -173,7 +173,7 @@ object CryptoService {
             val ci = iv.copyOf()
             addCounter(ci, counter++)
             encBlock(ci, roundKeys)
-            for (j in 0 until BLOCKSIZE) decResult[(i - 1) * BLOCKSIZE + j] = (ci[j] xor ciphertext[i * BLOCKSIZE + j])
+            for (j in 0 until BLOCKSIZE) decResult[(i - 1) * BLOCKSIZE + j] = (ci[j] xor ciphertext[i * BLOCKSIZE + j]).toByte()
         }
         return removePadding(decResult).toString(Charsets.UTF_8)
     }
@@ -238,7 +238,7 @@ object CryptoService {
         var aa = x.toByte(); var bb = y; var result = 0.toByte()
         var a = aa
         while (a.toInt() != 0) {
-            if ((a.toInt() and 1) != 0) result = (result xor bb)
+            if ((a.toInt() and 1) != 0) result = (result xor bb).toByte()
             val temp = (bb.toInt() and 0x80).toByte()
             bb = (bb.toInt() shl 1).toByte()
             if (temp.toInt() != 0) bb = (bb.toInt() xor 0x1b).toByte()
@@ -248,7 +248,7 @@ object CryptoService {
     }
 
     private fun addRoundKey(block: ByteArray, rk: ByteArray, start: Int) {
-        for (i in 0 until BLOCKSIZE) block[i] = (block[i] xor rk[i + start])
+        for (i in 0 until BLOCKSIZE) block[i] = (block[i] xor rk[i + start]).toByte()
     }
 
     private fun shiftWord(w: Int): Int {
@@ -325,7 +325,7 @@ object CryptoService {
         val res = ui.copyOf()
         repeat(c) {
             ui = prf(p, ui)
-            for (k in res.indices) res[k] = (res[k] xor ui[k])
+            for (k in res.indices) res[k] = (res[k] xor ui[k]).toByte()
         }
         return res
     }
