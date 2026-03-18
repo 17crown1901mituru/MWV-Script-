@@ -19,34 +19,16 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: gradle
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.2'
-
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ hashFiles('**/*.gradle*') }}
-          restore-keys: gradle-
-
-      # strings.xml が存在しない場合のみ生成
-      - name: Ensure strings.xml
+      - name: Install Gradle 8.2
         run: |
-          mkdir -p app/src/main/res/values
-          if [ ! -f app/src/main/res/values/strings.xml ]; then
-            cat > app/src/main/res/values/strings.xml << 'EOF'
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">MWV Script</string>
-    <string name="accessibility_service_description">MWV Scriptが他のアプリの画面読み取りと操作を行うために使用します。</string>
-</resources>
-EOF
-          fi
+          wget -q https://services.gradle.org/distributions/gradle-8.2-bin.zip -O /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d /opt
+          echo "/opt/gradle-8.2/bin" >> $GITHUB_PATH
+
+      - name: Ensure res files
+        run: mkdir -p app/src/main/res/values && test -f app/src/main/res/values/strings.xml || printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <string name="app_name">MWV Script</string>\n    <string name="accessibility_service_description">MWV Script accessibility service</string>\n</resources>\n' > app/src/main/res/values/strings.xml
 
       - name: Build debug APK
         run: gradle assembleDebug --stacktrace
