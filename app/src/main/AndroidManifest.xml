@@ -123,9 +123,9 @@
     <application
         android:name="androidx.multidex.MultiDexApplication"
         android:allowBackup="true"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@android:drawable/sym_def_app_icon"
         android:label="MWV Script"
-        android:roundIcon="@drawable/ic_launcher"
+        android:roundIcon="@android:drawable/sym_def_app_icon"
         android:supportsRtl="true"
         android:theme="@style/Theme.MWVScript"
         android:usesCleartextTraffic="true"
