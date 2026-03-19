@@ -374,25 +374,52 @@ class OverlayService : Service() {
         val web = cx1.newObject(scope) as org.mozilla.javascript.NativeObject
         org.mozilla.javascript.Context.exit()
 
-        // web.open(url, sessionId?)
+        // web.open(url, sessionId?, type?)
+        // type: "WEBVIEW"(default) / "TERMINAL" / "LAUNCHER"
         ScriptableObject.putProperty(web, "open", object : org.mozilla.javascript.BaseFunction() {
             override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
                 val url       = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "about:blank")
                 val sessionId = if (args.size > 1) org.mozilla.javascript.Context.toString(args[1])
                                 else WebViewService.DEFAULT_SESSION
+                val typeStr   = if (args.size > 2) org.mozilla.javascript.Context.toString(args[2]).uppercase()
+                                else "WEBVIEW"
+                val tabType   = runCatching { WebViewService.TabType.valueOf(typeStr) }
+                                .getOrDefault(WebViewService.TabType.WEBVIEW)
                 val wvs = WebViewService.instance
                 if (wvs != null) {
-                    wvs.openTab(url, sessionId)
+                    wvs.openTab(url, sessionId, tabType)
                 } else {
-                    // WebViewServiceが未起動なら起動してから開く
                     service.startForegroundService(
                         Intent(service, WebViewService::class.java).apply {
                             action = WebViewService.ACTION_OPEN
                             putExtra(WebViewService.EXTRA_URL, url)
                             putExtra(WebViewService.EXTRA_SESSION, sessionId)
+                            putExtra(WebViewService.EXTRA_TYPE, typeStr)
                         }
                     )
                 }
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        // web.openTerminal(sessionId?, label?)
+        ScriptableObject.putProperty(web, "openTerminal", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val sessionId = if (args.isNotEmpty()) org.mozilla.javascript.Context.toString(args[0])
+                                else "term_${System.currentTimeMillis()}"
+                val label     = if (args.size > 1) org.mozilla.javascript.Context.toString(args[1]) else "Term"
+                WebViewService.instance?.openTab(sessionId = sessionId, type = WebViewService.TabType.TERMINAL, label = label)
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        // web.openLauncher(sessionId?, label?)
+        ScriptableObject.putProperty(web, "openLauncher", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val sessionId = if (args.isNotEmpty()) org.mozilla.javascript.Context.toString(args[0])
+                                else "apps_${System.currentTimeMillis()}"
+                val label     = if (args.size > 1) org.mozilla.javascript.Context.toString(args[1]) else "Apps"
+                WebViewService.instance?.openTab(sessionId = sessionId, type = WebViewService.TabType.LAUNCHER, label = label)
                 return org.mozilla.javascript.Context.getUndefinedValue()
             }
         })
@@ -494,6 +521,18 @@ class OverlayService : Service() {
             override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
                 val key = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: "")
                 return WebViewService.sharedVars[key] ?: org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        // web.setKeepAlive(sessionId, bool) → タブのアクティブキープ設定
+        ScriptableObject.putProperty(web, "setKeepAlive", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val sessionId = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: WebViewService.DEFAULT_SESSION)
+                val keep      = args.getOrNull(1)?.let {
+                    org.mozilla.javascript.Context.toString(it) != "false" && it != false
+                } ?: true
+                WebViewService.instance?.setKeepAlive(sessionId, keep)
+                return org.mozilla.javascript.Context.getUndefinedValue()
             }
         })
 
