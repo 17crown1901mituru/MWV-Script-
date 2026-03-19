@@ -243,8 +243,7 @@ class HubService : Service() {
                 val msg = args.joinToString(" ") { RhinoContext.toString(it) }
                 Log.d(TAG, msg)
                 mainHandler.post {
-                    MainActivity.instance?.printLine(msg)
-                    OverlayService.instance?.appendOutput(msg)
+                    MainActivity.instance?.appendOutput(msg)
                 }
                 return RhinoContext.getUndefinedValue()
             }
