@@ -3,10 +3,8 @@ package com.mwvscript.app
 import android.app.*
 import android.content.Context
 import android.content.Intent
-import android.graphics.PixelFormat
 import android.os.*
 import android.view.*
-import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.core.app.NotificationCompat
 import org.mozilla.javascript.ScriptableObject
@@ -30,14 +28,7 @@ class OverlayService : Service() {
         }
     }
 
-    private lateinit var windowManager: WindowManager
-    private var overlayView: View? = null
-    private var isShowing = false
     private val mainHandler = Handler(Looper.getMainLooper())
-
-    private lateinit var terminalContainer: LinearLayout
-    private lateinit var scrollView: ScrollView
-    private lateinit var activeInput: EditText
 
     // ======================================================
     // ライフサイクル
@@ -46,7 +37,6 @@ class OverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIF_ID, buildNotification(),
                 android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
@@ -58,7 +48,7 @@ class OverlayService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_TOGGLE    -> if (isShowing) hideOverlay() else showOverlay()
+            ACTION_TOGGLE    -> { /* フローティングターミナル削除済み */ }
             ACTION_NOTIF_RUN -> {
                 val script = intent.getStringExtra(EXTRA_NOTIF_SCRIPT) ?: return START_STICKY
                 HubService.instance?.executeAsync(script)
@@ -68,7 +58,6 @@ class OverlayService : Service() {
     }
 
     override fun onDestroy() {
-        hideOverlay()
         instance = null
         super.onDestroy()
     }
@@ -76,262 +65,16 @@ class OverlayService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     // ======================================================
-    // オーバーレイ表示/非表示
-    // ======================================================
-
-    private fun showOverlay() {
-        if (isShowing) return
-        if (!android.provider.Settings.canDrawOverlays(this)) {
-            startActivity(Intent(
-                android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                android.net.Uri.parse("package:$packageName")
-            ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
-            return
-        }
-        val view   = buildOverlayView()
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            getScreenHeight() / 2,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.BOTTOM }
-
-        windowManager.addView(view, params)
-        overlayView = view
-        isShowing   = true
-        updateNotification()
-
-        // フォーカスを有効にして入力できるようにする
-        mainHandler.postDelayed({
-            try {
-                val lp = params.apply {
-                    flags = flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
-                }
-                windowManager.updateViewLayout(view, lp)
-                activeInput.requestFocus()
-            } catch (_: Exception) {}
-        }, 100)
-    }
-
-    private fun hideOverlay() {
-        overlayView?.let {
-            try { windowManager.removeView(it) } catch (_: Exception) {}
-            overlayView = null
-        }
-        isShowing = false
-        updateNotification()
-    }
-
-    private fun getScreenHeight(): Int =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            windowManager.currentWindowMetrics.bounds.height()
-        } else {
-            val dm = android.util.DisplayMetrics()
-            @Suppress("DEPRECATION")
-            windowManager.defaultDisplay.getMetrics(dm)
-            dm.heightPixels
-        }
-
-    // ======================================================
-    // オーバーレイUI構築
-    // ======================================================
-
-    private fun buildOverlayView(): View {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(android.graphics.Color.parseColor("#DD000000"))
-        }
-
-        // ヘッダー
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(android.graphics.Color.parseColor("#1a1a1a"))
-            setPadding(16, 8, 8, 8)
-        }
-        header.addView(TextView(this).apply {
-            text = "MWV Terminal"
-            setTextColor(android.graphics.Color.GREEN)
-            textSize = 12f
-            typeface = android.graphics.Typeface.MONOSPACE
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        })
-        header.addView(Button(this).apply {
-            text = "✕"
-            textSize = 11f
-            setTextColor(android.graphics.Color.WHITE)
-            setBackgroundColor(android.graphics.Color.parseColor("#550000"))
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(4, 0, 4, 0) }
-            setPadding(16, 4, 16, 4)
-            setOnClickListener { hideOverlay() }
-        })
-
-        // ターミナル本体
-        val termBody = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(12, 8, 12, 8)
-        }
-        terminalContainer = termBody
-
-        scrollView = ScrollView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-            addView(terminalContainer)
-        }
-
-        // 入力欄
-        activeInput = EditText(this).apply {
-            setTextColor(android.graphics.Color.WHITE)
-            textSize  = 12f
-            typeface  = android.graphics.Typeface.MONOSPACE
-            setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            setPadding(0, 4, 0, 4)
-            hint = "> "
-            setHintTextColor(android.graphics.Color.GRAY)
-            inputType  = android.text.InputType.TYPE_CLASS_TEXT or
-                         android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
-                         android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_ENTER_ACTION
-            isSingleLine = false
-            minLines = 1
-        }
-
-        root.addView(header)
-        root.addView(scrollView)
-        root.addView(activeInput)
-        root.addView(buildExtraKeyboard())
-        return root
-    }
-
-    private fun buildExtraKeyboard(): LinearLayout {
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(android.graphics.Color.parseColor("#111111"))
-        }
-
-        // 記号行
-        val symbolRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(4, 4, 4, 0)
-        }
-        listOf("()", "\"", "'", ";", ".", "/").forEach { sym ->
-            symbolRow.addView(extraKey(sym) {
-                val pos = activeInput.selectionStart
-                activeInput.text.insert(pos, sym)
-            })
-        }
-        container.addView(symbolRow)
-
-        // 操作行
-        val actionRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(4, 4, 4, 4)
-        }
-        actionRow.addView(extraKey("RUN", android.graphics.Color.parseColor("#005500")) { runInput() })
-        actionRow.addView(extraKey("PASTE") {
-            val cb = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            val text = cb.primaryClip?.getItemAt(0)?.text?.toString() ?: return@extraKey
-            activeInput.text.insert(activeInput.selectionStart, text)
-        })
-        actionRow.addView(extraKey("COPY") {
-            val sel = activeInput.text.substring(
-                activeInput.selectionStart.coerceAtLeast(0),
-                activeInput.selectionEnd.coerceAtLeast(0)
-            )
-            if (sel.isNotEmpty()) {
-                val cb = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                cb.setPrimaryClip(android.content.ClipData.newPlainText("copied", sel))
-                appendOutput("コピーしました")
-            }
-        })
-        actionRow.addView(extraKey("KB") {
-            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-            imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
-        })
-        container.addView(actionRow)
-        return container
-    }
-
-    private fun extraKey(
-        label: String,
-        bgColor: Int = android.graphics.Color.parseColor("#222222"),
-        onClick: () -> Unit
-    ) = Button(this).apply {
-        text = label
-        textSize = 11f
-        setTextColor(android.graphics.Color.WHITE)
-        setBackgroundColor(bgColor)
-        layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            .apply { setMargins(2, 2, 2, 2) }
-        setPadding(4, 8, 4, 8)
-        setOnClickListener { onClick() }
-    }
-
-    // ======================================================
-    // ターミナル入出力
+    // 出力転送（HubServiceから呼ばれる）
+    // フローティングターミナルは廃止、MainActivityに転送するのみ
     // ======================================================
 
     fun appendOutput(text: String) {
-        lastOutput = text
-        updateNotification()
-        mainHandler.post {
-            if (!::terminalContainer.isInitialized) return@post
-            terminalContainer.addView(TextView(this).apply {
-                setTextColor(android.graphics.Color.GREEN)
-                textSize = 12f
-                typeface = android.graphics.Typeface.MONOSPACE
-                this.text = text
-            })
-            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
-        }
+        MainActivity.instance?.appendOutput(text)
     }
 
-    private fun runInput() {
-        val input = activeInput.text.toString().trim()
-        if (input.isEmpty()) return
-
-        mainHandler.post {
-            terminalContainer.addView(TextView(this).apply {
-                setTextColor(android.graphics.Color.CYAN)
-                textSize = 12f
-                typeface = android.graphics.Typeface.MONOSPACE
-                text = "> $input"
-            })
-            activeInput.setText("")
-        }
-
-        Thread {
-            val scope = HubService.rhinoScope
-            if (scope == null) { appendOutput("エラー: Rhinoエンジン未起動"); return@Thread }
-            try {
-                val cx = org.mozilla.javascript.Context.enter()
-                cx.optimizationLevel = -1
-                val result = if (input.endsWith(".rjs") || input.endsWith(".js")) {
-                    val file = java.io.File(
-                        android.os.Environment.getExternalStoragePublicDirectory(
-                            android.os.Environment.DIRECTORY_DOWNLOADS),
-                        "MWV-Script/$input")
-                    if (!file.exists()) {
-                        appendOutput("エラー: 見つかりません: ${file.absolutePath}")
-                        org.mozilla.javascript.Context.exit()
-                        return@Thread
-                    }
-                    cx.evaluateString(scope, file.readText(), file.name, 1, null)
-                } else {
-                    cx.evaluateString(scope, input, "<overlay>", 1, null)
-                }
-                org.mozilla.javascript.Context.exit()
-                val str = org.mozilla.javascript.Context.toString(result)
-                if (str != "undefined") appendOutput(str)
-            } catch (e: Exception) {
-                try { org.mozilla.javascript.Context.exit() } catch (_: Exception) {}
-                appendOutput("エラー: ${e.message}")
-            }
-        }.start()
+    fun setInput(text: String) {
+        MainActivity.instance?.setInput(text)
     }
 
     // ======================================================
@@ -348,15 +91,14 @@ class OverlayService : Service() {
         val overlay = cx0.newObject(scope) as org.mozilla.javascript.NativeObject
         org.mozilla.javascript.Context.exit()
 
+        // overlay.show()/hide() はフローティングターミナル削除により何もしないスタブ
         ScriptableObject.putProperty(overlay, "show", object : org.mozilla.javascript.BaseFunction() {
             override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
-                mainHandler.post { service.showOverlay() }
                 return org.mozilla.javascript.Context.getUndefinedValue()
             }
         })
         ScriptableObject.putProperty(overlay, "hide", object : org.mozilla.javascript.BaseFunction() {
             override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
-                mainHandler.post { service.hideOverlay() }
                 return org.mozilla.javascript.Context.getUndefinedValue()
             }
         })
@@ -536,6 +278,33 @@ class OverlayService : Service() {
         ScriptableObject.putProperty(web, "show", object : org.mozilla.javascript.BaseFunction() {
             override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
                 WebViewService.instance?.showOverlay()
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        // web.tabs() → タブ情報一覧（ドロワーから使う）
+        ScriptableObject.putProperty(web, "tabs", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val act = MainActivity.instance ?: return org.mozilla.javascript.Context.getUndefinedValue()
+                val list = act.getTabInfoList()
+                val cx2 = org.mozilla.javascript.Context.enter()
+                cx2.optimizationLevel = -1
+                val arr = cx2.newArray(scope, list.size)
+                list.forEachIndexed { i, map ->
+                    val obj = cx2.newObject(scope) as org.mozilla.javascript.NativeObject
+                    map.forEach { (k, v) -> org.mozilla.javascript.ScriptableObject.putProperty(obj, k, v) }
+                    org.mozilla.javascript.ScriptableObject.putProperty(arr, i, obj)
+                }
+                org.mozilla.javascript.Context.exit()
+                return arr
+            }
+        })
+
+        // web.activate(sessionId) → タブをアクティブ化
+        ScriptableObject.putProperty(web, "activate", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                val sessionId = org.mozilla.javascript.Context.toString(args.getOrNull(0) ?: WebViewService.DEFAULT_SESSION)
+                mainHandler.post { MainActivity.instance?.openTab(sessionId, MainActivity.TabType.TERMINAL, "") }
                 return org.mozilla.javascript.Context.getUndefinedValue()
             }
         })
