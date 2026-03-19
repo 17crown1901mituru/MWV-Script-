@@ -95,6 +95,8 @@ class WebViewService : Service() {
 
     private val terminalContainers  = mutableMapOf<String, LinearLayout>()
     private val terminalScrollViews = mutableMapOf<String, ScrollView>()
+    private var overlayLayoutParams: WindowManager.LayoutParams? = null
+    private var isOverlayVisible = true
 
     // ----------------------------------------------------------
     // ライフサイクル
@@ -465,18 +467,55 @@ class WebViewService : Service() {
         root.addView(tabScroll)
         root.addView(content)
         rootView = root
-        wm.addView(root, WindowManager.LayoutParams(
+        val lp = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            // FLAG_NOT_TOUCH_MODALのみだとフォーカスがなくタッチが下に抜ける
+            // FLAG_LAYOUT_IN_SCREENでステータスバー下に正しく配置
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.TOP or Gravity.START })
+        ).apply { gravity = Gravity.TOP or Gravity.START }
+        wm.addView(root, lp)
+        overlayLayoutParams = lp
     }
+
+    /** オーバーレイ全体を非表示（最小化） */
+    fun hideOverlay() {
+        val root = rootView ?: return
+        val lp   = overlayLayoutParams ?: return
+        mainHandler.post {
+            try {
+                lp.width  = 1
+                lp.height = 1
+                lp.flags  = lp.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                wm.updateViewLayout(root, lp)
+                isOverlayVisible = false
+            } catch (e: Exception) { Log.w(TAG, e) }
+        }
+    }
+
+    /** オーバーレイ全体を再表示 */
+    fun showOverlay() {
+        val root = rootView ?: return
+        val lp   = overlayLayoutParams ?: return
+        mainHandler.post {
+            try {
+                lp.width  = WindowManager.LayoutParams.MATCH_PARENT
+                lp.height = WindowManager.LayoutParams.MATCH_PARENT
+                lp.flags  = lp.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                wm.updateViewLayout(root, lp)
+                isOverlayVisible = true
+            } catch (e: Exception) { Log.w(TAG, e) }
+        }
+    }
+
+    fun isVisible() = isOverlayVisible
 
     private fun removeRootView() {
         rootView?.let { try { wm.removeView(it) } catch (e: Exception) { Log.w(TAG, e) } }
         rootView = null; tabScrollView = null; tabBarInner = null; contentFrame = null
+        overlayLayoutParams = null
     }
 
     private fun refreshTabBar() {
@@ -513,6 +552,18 @@ class WebViewService : Service() {
                     setOnClickListener { showNewTabDialog() }
                 })
             }
+            // 最小化ボタン（常に右端）
+            bar.addView(TextView(this).apply {
+                text     = " ━ "
+                textSize = 16f
+                gravity  = Gravity.CENTER
+                setTextColor(Color.parseColor("#888899"))
+                setBackgroundColor(Color.parseColor("#0f0f1e"))
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.MATCH_PARENT)
+                setOnClickListener { hideOverlay() }
+            })
         }
     }
 
