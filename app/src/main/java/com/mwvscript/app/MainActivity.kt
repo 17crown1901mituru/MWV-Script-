@@ -584,7 +584,20 @@ class MainActivity : AppCompatActivity() {
         })
         actionRow.addView(extraKey("KB") {
             val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-            currentFocus?.let { imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0) }
+            val tab = tabs.firstOrNull { it.sessionId == activeSession }
+            if (tab?.type == TabType.WEBVIEW) {
+                // WebViewタブ: WebViewにフォーカスを与えてからキーボードを出す
+                tab.webView?.let { wv ->
+                    wv.requestFocus()
+                    imm.showSoftInput(wv, InputMethodManager.SHOW_FORCED)
+                }
+            } else {
+                // ターミナルタブ: EditTextにフォーカスを与えてキーボードを出す
+                currentInput()?.let { input ->
+                    input.requestFocus()
+                    imm.showSoftInput(input, InputMethodManager.SHOW_FORCED)
+                }
+            }
         })
         actionRow.addView(extraKey("DRAWER", Color.parseColor("#003355")) {
             HubService.instance?.executeAsync("if(typeof drawer!=='undefined') drawer.toggle();")
@@ -652,14 +665,6 @@ class MainActivity : AppCompatActivity() {
     private fun addFloatingDrawerButton() {
         if (floatingDrawerBtn != null) return
         val wm = getSystemService(WINDOW_SERVICE) as android.view.WindowManager
-        val btn = TextView(this).apply {
-            text      = "☰"
-            textSize  = 18f
-            gravity   = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            setBackgroundColor(Color.parseColor("#cc1a1a2e"))
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-        }
         val lp = android.view.WindowManager.LayoutParams(
             android.view.WindowManager.LayoutParams.WRAP_CONTENT,
             android.view.WindowManager.LayoutParams.WRAP_CONTENT,
@@ -668,12 +673,53 @@ class MainActivity : AppCompatActivity() {
             android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             android.graphics.PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.BOTTOM or Gravity.END
+            gravity = Gravity.TOP or Gravity.START
             x = dp(8)
-            y = dp(80)
+            y = dp(200)
         }
-        btn.setOnClickListener {
-            HubService.instance?.executeAsync("if(typeof drawer!=='undefined') drawer.toggle();")
+        val btn = TextView(this).apply {
+            text     = "☰"
+            textSize = 18f
+            gravity  = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#cc1a1a2e"))
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+
+            var dX = 0f; var dY = 0f
+            var isDragging = false
+            var downX = 0f; var downY = 0f
+
+            setOnTouchListener { v, event ->
+                when (event.action) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        dX = lp.x - event.rawX
+                        dY = lp.y - event.rawY
+                        downX = event.rawX; downY = event.rawY
+                        isDragging = false
+                        true
+                    }
+                    android.view.MotionEvent.ACTION_MOVE -> {
+                        val dx = Math.abs(event.rawX - downX)
+                        val dy = Math.abs(event.rawY - downY)
+                        if (dx > dp(8) || dy > dp(8)) isDragging = true
+                        if (isDragging) {
+                            lp.x = (event.rawX + dX).toInt()
+                            lp.y = (event.rawY + dY).toInt()
+                            try { wm.updateViewLayout(v, lp) } catch (e: Exception) {}
+                        }
+                        true
+                    }
+                    android.view.MotionEvent.ACTION_UP -> {
+                        if (!isDragging) {
+                            // ドラッグでなければタップ → ドロワー開閉
+                            HubService.instance?.executeAsync(
+                                "if(typeof drawer!=='undefined') drawer.toggle();")
+                        }
+                        true
+                    }
+                    else -> false
+                }
+            }
         }
         try {
             wm.addView(btn, lp)
