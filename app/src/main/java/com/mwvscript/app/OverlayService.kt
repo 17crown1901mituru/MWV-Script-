@@ -524,6 +524,22 @@ class OverlayService : Service() {
             }
         })
 
+        // web.hide() → オーバーレイ全体を最小化
+        ScriptableObject.putProperty(web, "hide", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                WebViewService.instance?.hideOverlay()
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+        // web.show() → オーバーレイを再表示
+        ScriptableObject.putProperty(web, "show", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                WebViewService.instance?.showOverlay()
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
         // web.setKeepAlive(sessionId, bool) → タブのアクティブキープ設定
         ScriptableObject.putProperty(web, "setKeepAlive", object : org.mozilla.javascript.BaseFunction() {
             override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
