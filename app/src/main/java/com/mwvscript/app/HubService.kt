@@ -123,16 +123,53 @@ class HubService : Service() {
     }
 
     private fun runInitScript() {
-        val initFile = java.io.File(getExternalFilesDir(null), "init.rjs")
-        if (!initFile.exists()) {
-            Log.d(TAG, "init.rjs が見つかりません: ${initFile.absolutePath}")
+        val destFile = java.io.File(getExternalFilesDir(null), "init.rjs")
+        val srcFile  = java.io.File(
+            android.os.Environment.getExternalStoragePublicDirectory(
+                android.os.Environment.DIRECTORY_DOWNLOADS),
+            "MWV-Script/init.rjs"
+        )
+
+        // Download/MWV-Script/ 以下を files/ に丸ごと同期
+        val mwvScriptDir = srcFile.parentFile
+        if (mwvScriptDir != null && mwvScriptDir.exists()) {
+            try {
+                syncDirectory(mwvScriptDir, getExternalFilesDir(null)!!)
+                Log.d(TAG, "MWV-Script同期完了")
+            } catch (e: Exception) {
+                Log.e(TAG, "MWV-Script同期失敗: ${e.message}")
+            }
+        }
+
+        if (!destFile.exists()) {
+            Log.d(TAG, "init.rjs が見つかりません: ${destFile.absolutePath}")
             return
         }
         try {
-            evaluateOnRhinoThread(initFile.readText(), "init.rjs")
+            evaluateOnRhinoThread(destFile.readText(), "init.rjs")
             Log.d(TAG, "init.rjs 実行完了")
         } catch (e: Exception) {
             Log.e(TAG, "init.rjs エラー: ${e.message}")
+        }
+    }
+
+    // =========================================================
+    // ディレクトリ同期
+    // =========================================================
+
+    private fun syncDirectory(src: java.io.File, dest: java.io.File) {
+        dest.mkdirs()
+        src.listFiles()?.forEach { srcFile ->
+            val destFile = java.io.File(dest, srcFile.name)
+            if (srcFile.isDirectory) {
+                syncDirectory(srcFile, destFile)
+            } else {
+                // 存在しないか、サイズが違う場合のみコピー
+                if (!destFile.exists() || destFile.length() != srcFile.length()) {
+                    srcFile.copyTo(destFile, overwrite = true)
+                    Log.d(TAG, "コピー: ${srcFile.name}")
+                }
+            }
         }
     }
 
