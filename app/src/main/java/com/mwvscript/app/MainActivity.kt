@@ -84,11 +84,7 @@ class MainActivity : AppCompatActivity() {
         buildUI()
         startServices()
         // デフォルトターミナルタブを作成
-        openTab(DEFAULT_TERMINAL,              TabType.TERMINAL, "Term")
-        openTab("main_launcher",               TabType.LAUNCHER, "Apps")
-        openTab("main_web",                    TabType.WEBVIEW,  "Web")
-        openTab("main_samples",                TabType.SAMPLES,  "Samples")
-        activateTab(DEFAULT_TERMINAL)
+        openTab(DEFAULT_TERMINAL, TabType.TERMINAL, "Term")
     }
 
     override fun onResume() {
@@ -194,11 +190,7 @@ class MainActivity : AppCompatActivity() {
             tabs.remove(tab)
             if (tabs.isEmpty()) {
                 // ターミナルタブを再作成
-        openTab(DEFAULT_TERMINAL,              TabType.TERMINAL, "Term")
-        openTab("main_launcher",               TabType.LAUNCHER, "Apps")
-        openTab("main_web",                    TabType.WEBVIEW,  "Web")
-        openTab("main_samples",                TabType.SAMPLES,  "Samples")
-        activateTab(DEFAULT_TERMINAL)
+        openTab(DEFAULT_TERMINAL, TabType.TERMINAL, "Term")
             } else {
                 if (activeSession == sessionId) activateTab(tabs.last().sessionId)
                 else refreshTabBar()
@@ -724,7 +716,12 @@ class MainActivity : AppCompatActivity() {
             }
         })
         actionRow.addView(extraKey("DRAWER", Color.parseColor("#003355")) {
-            HubService.instance?.executeAsync("if(typeof drawer!=='undefined') drawer.toggle();")
+            HubService.instance?.executeAsync("""
+                try {
+                    if (typeof drawer !== 'undefined') drawer.toggle();
+                    else { popup('drawer未定義'); reload(); }
+                } catch(e) {}
+            """.trimIndent())
         })
         actionRow.addView(extraKey("EXIT", Color.parseColor("#550000")) {
             stopService(Intent(this, HubService::class.java))
@@ -836,8 +833,16 @@ class MainActivity : AppCompatActivity() {
                     android.view.MotionEvent.ACTION_UP -> {
                         if (!isDragging) {
                             // ドラッグでなければタップ → ドロワー開閉
-                            HubService.instance?.executeAsync(
-                                "if(typeof drawer!=='undefined') drawer.toggle();")
+                            HubService.instance?.executeAsync("""
+                                try {
+                                    if (typeof drawer !== 'undefined') {
+                                        drawer.toggle();
+                                    } else {
+                                        popup('drawer未定義 - drawer.rjsをリロードしてください');
+                                        reload();
+                                    }
+                                } catch(e) { print('[drawer] ' + e); }
+                            """.trimIndent())
                         }
                         true
                     }
