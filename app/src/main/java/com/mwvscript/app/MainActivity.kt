@@ -474,7 +474,7 @@ $text")
               "type" to it.type.name, "active" to (it.sessionId == activeSession).toString())
     }
 
-    private fun activateTab(sessionId: String) {
+    fun activateTab(sessionId: String) {
         val prev = activeSession
         activeSession = sessionId
         mainHandler.post {
