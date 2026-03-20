@@ -345,6 +345,15 @@ class OverlayService : Service() {
         })
         ScriptableObject.putProperty(scope, "terminal", terminal)
 
+        // ---- reload() ---- Download/MWV-Script/を同期してinit.rjsを再実行
+        ScriptableObject.putProperty(scope, "reload", object : org.mozilla.javascript.BaseFunction() {
+            override fun call(cx: org.mozilla.javascript.Context, scope: org.mozilla.javascript.Scriptable, thisObj: org.mozilla.javascript.Scriptable?, args: Array<out Any?>): Any? {
+                Thread { HubService.instance?.reloadInit() }.start()
+                return org.mozilla.javascript.Context.getUndefinedValue()
+            }
+        })
+
+
         // ---- shell オブジェクト ----
         val cxShell = org.mozilla.javascript.Context.enter()
         cxShell.optimizationLevel = -1
