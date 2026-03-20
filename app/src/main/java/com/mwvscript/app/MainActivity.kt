@@ -213,6 +213,8 @@ class MainActivity : AppCompatActivity() {
                 textSize  = 11f
                 typeface  = Typeface.MONOSPACE
                 setPadding(dp(4), dp(1), dp(4), dp(1))
+                // 範囲選択・コピーを標準UIで行えるようにする
+                setTextIsSelectable(true)
             })
             sv.post { sv.fullScroll(ScrollView.FOCUS_DOWN) }
         }
@@ -572,13 +574,20 @@ class MainActivity : AppCompatActivity() {
             currentInput()?.let { it.text.insert(it.selectionStart.coerceAtLeast(0), text) }
         })
         actionRow.addView(extraKey("COPY") {
-            currentInput()?.let { input ->
-                val sel = input.text.substring(
-                    input.selectionStart.coerceAtLeast(0),
-                    input.selectionEnd.coerceAtLeast(0))
-                if (sel.isNotEmpty()) {
+            // ターミナルの全出力テキストをまとめてコピー
+            val sid = activeSession ?: DEFAULT_TERMINAL
+            val container = terminalContainers[sid]
+            if (container != null) {
+                val sb = StringBuilder()
+                for (i in 0 until container.childCount) {
+                    val v = container.getChildAt(i)
+                    if (v is TextView) sb.appendLine(v.text)
+                }
+                val all = sb.toString().trim()
+                if (all.isNotEmpty()) {
                     val cb = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    cb.setPrimaryClip(ClipData.newPlainText("copied", sel))
+                    cb.setPrimaryClip(ClipData.newPlainText("terminal", all))
+                    appendOutput("📋 ターミナル全行コピー完了 (${all.lines().size}行)")
                 }
             }
         })
