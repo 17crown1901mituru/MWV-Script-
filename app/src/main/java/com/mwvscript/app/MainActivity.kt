@@ -266,12 +266,19 @@ class MainActivity : AppCompatActivity() {
             isFocusable     = false
             isClickable     = true
             isCursorVisible = false
-            // TYPE_NULLはシングルライン化するので使わない
-            // 折り返しを有効にするためにTYPE_CLASS_TEXT|MULTI_LINEを使いkeyListenerをnullにする
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                         android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            keyListener = null            // 編集不可
-            setTextIsSelectable(true)     // 範囲選択は可能
+            keyListener = null
+            setTextIsSelectable(true)
+            // MATCH_PARENTを明示しないとScrollView内で幅0になり折り返しが起きない
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT)
+            // 折り返し強制
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                breakStrategy        = android.text.Layout.BREAK_STRATEGY_SIMPLE
+                hyphenationFrequency = android.text.Layout.HYPHENATION_FREQUENCY_NONE
+            }
         }
         terminalContainers[sessionId] = outputEdit
         val sv = ScrollView(this).apply {
