@@ -84,7 +84,7 @@ class MainActivity : AppCompatActivity() {
         buildUI()
         startServices()
         // デフォルトターミナルタブを作成
-openTab(DEFAULT_TERMINAL,              TabType.TERMINAL, "Term")
+        openTab(DEFAULT_TERMINAL,              TabType.TERMINAL, "Term")
         openTab("main_launcher",               TabType.LAUNCHER, "Apps")
         openTab("main_web",                    TabType.WEBVIEW,  "Web")
         openTab("main_samples",                TabType.SAMPLES,  "Samples")
@@ -517,7 +517,7 @@ openTab(DEFAULT_TERMINAL,              TabType.TERMINAL, "Term")
                         setPadding(dp(8), dp(12), dp(12), dp(12))
                         setOnClickListener {
                             HubService.instance?.loadAndExecute(file.absolutePath)
-                            appendOutput("> load("samples/${file.name}")")
+                            appendOutput("> load(\"samples/${file.name}\")")
                             activateTab(DEFAULT_TERMINAL)
                         }
                     }
