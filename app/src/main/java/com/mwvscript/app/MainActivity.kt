@@ -65,7 +65,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var extraKeyboard: LinearLayout
 
     // ターミナル用
-    private val terminalContainers  = mutableMapOf<String, LinearLayout>()
+    private val terminalContainers  = mutableMapOf<String, EditText>()  // 行ごとではなく1つのEditTextに追記
     private val terminalScrollViews = mutableMapOf<String, ScrollView>()
     private val terminalInputs      = mutableMapOf<String, EditText>()
 
@@ -205,17 +205,15 @@ class MainActivity : AppCompatActivity() {
 
     fun appendToTerminal(sessionId: String, text: String) {
         mainHandler.post {
-            val container = terminalContainers[sessionId] ?: return@post
-            val sv        = terminalScrollViews[sessionId] ?: return@post
-            container.addView(TextView(this).apply {
-                this.text = text
-                setTextColor(Color.parseColor("#00ff88"))
-                textSize  = 11f
-                typeface  = Typeface.MONOSPACE
-                setPadding(dp(4), dp(1), dp(4), dp(1))
-                // 範囲選択・コピーを標準UIで行えるようにする
-                setTextIsSelectable(true)
-            })
+            val et = terminalContainers[sessionId] ?: return@post
+            val sv = terminalScrollViews[sessionId] ?: return@post
+            val current = et.text
+            if (current.isEmpty()) {
+                et.setText(text)
+            } else {
+                current.append("
+$text")
+            }
             sv.post { sv.fullScroll(ScrollView.FOCUS_DOWN) }
         }
     }
@@ -260,15 +258,23 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#0a0a0f"))
         }
-        val outputContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        val outputEdit = EditText(this).apply {
+            setTextColor(Color.parseColor("#00ff88"))
+            textSize     = 11f
+            typeface     = Typeface.MONOSPACE
             setPadding(dp(8), dp(8), dp(8), dp(4))
+            setBackgroundColor(Color.parseColor("#0a0a0f"))
+            isFocusable  = false          // キーボードは出さない
+            isClickable  = true
+            isCursorVisible = false
+            inputType    = android.text.InputType.TYPE_NULL  // 編集不可
+            setTextIsSelectable(true)     // 範囲選択は可能
         }
-        terminalContainers[sessionId] = outputContainer
+        terminalContainers[sessionId] = outputEdit
         val sv = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-            addView(outputContainer)
+            addView(outputEdit)
         }
         terminalScrollViews[sessionId] = sv
 
@@ -574,21 +580,17 @@ class MainActivity : AppCompatActivity() {
             currentInput()?.let { it.text.insert(it.selectionStart.coerceAtLeast(0), text) }
         })
         actionRow.addView(extraKey("COPY") {
-            // ターミナルの全出力テキストをまとめてコピー
+            // 選択範囲があればそれを、なければ全テキストをコピー
             val sid = activeSession ?: DEFAULT_TERMINAL
-            val container = terminalContainers[sid]
-            if (container != null) {
-                val sb = StringBuilder()
-                for (i in 0 until container.childCount) {
-                    val v = container.getChildAt(i)
-                    if (v is TextView) sb.appendLine(v.text)
-                }
-                val all = sb.toString().trim()
-                if (all.isNotEmpty()) {
-                    val cb = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    cb.setPrimaryClip(ClipData.newPlainText("terminal", all))
-                    appendOutput("📋 ターミナル全行コピー完了 (${all.lines().size}行)")
-                }
+            val et  = terminalContainers[sid] ?: return@extraKey
+            val sel = et.text.substring(
+                et.selectionStart.coerceAtLeast(0),
+                et.selectionEnd.coerceAtLeast(0))
+            val text = if (sel.isNotEmpty()) sel else et.text.toString()
+            if (text.isNotEmpty()) {
+                val cb = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cb.setPrimaryClip(ClipData.newPlainText("terminal", text))
+                appendOutput("📋 コピー完了 (${text.lines().size}行)")
             }
         })
         actionRow.addView(extraKey("KB") {
