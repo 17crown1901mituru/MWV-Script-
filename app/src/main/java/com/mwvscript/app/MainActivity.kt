@@ -263,10 +263,14 @@ class MainActivity : AppCompatActivity() {
             typeface     = Typeface.MONOSPACE
             setPadding(dp(8), dp(8), dp(8), dp(4))
             setBackgroundColor(Color.parseColor("#0a0a0f"))
-            isFocusable  = false          // キーボードは出さない
-            isClickable  = true
+            isFocusable     = false
+            isClickable     = true
             isCursorVisible = false
-            inputType    = android.text.InputType.TYPE_NULL  // 編集不可
+            // TYPE_NULLはシングルライン化するので使わない
+            // 折り返しを有効にするためにTYPE_CLASS_TEXT|MULTI_LINEを使いkeyListenerをnullにする
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                        android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            keyListener = null            // 編集不可
             setTextIsSelectable(true)     // 範囲選択は可能
         }
         terminalContainers[sessionId] = outputEdit
