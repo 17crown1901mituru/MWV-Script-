@@ -20,6 +20,7 @@ class HubService : Service() {
         const val NOTIF_ID     = 1001
         const val ACTION_EXECUTE = "com.mwvscript.app.EXECUTE"
         const val ACTION_BOOT    = "com.mwvscript.app.INITIAL_BOOT"
+        const val ACTION_RELOAD  = "com.mwvscript.app.RELOAD"
         const val EXTRA_SCRIPT   = "script"
         const val EXTRA_PATH     = "path"
 
@@ -63,6 +64,7 @@ class HubService : Service() {
                 }
             }
             ACTION_BOOT -> Log.d(TAG, "BOOT intent受信")
+            ACTION_RELOAD -> Thread { reloadInit() }.start()
         }
         return START_STICKY
     }
@@ -120,6 +122,19 @@ class HubService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Rhino初期化失敗: ${e.message}")
         }
+    }
+
+    fun reloadInit() {
+        Log.d(TAG, "reloadInit: 同期+再実行")
+        val srcDir = java.io.File(
+            android.os.Environment.getExternalStoragePublicDirectory(
+                android.os.Environment.DIRECTORY_DOWNLOADS), "MWV-Script"
+        )
+        if (srcDir.exists()) {
+            try { syncDirectory(srcDir, getExternalFilesDir(null)!!) }
+            catch (e: Exception) { Log.e(TAG, "sync失敗: ${e.message}") }
+        }
+        runInitScript()
     }
 
     private fun runInitScript() {
