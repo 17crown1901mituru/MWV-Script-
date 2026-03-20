@@ -34,7 +34,7 @@ class MainActivity : AppCompatActivity() {
     // ----------------------------------------------------------
     // タブ種別
     // ----------------------------------------------------------
-    enum class TabType { TERMINAL, WEBVIEW, LAUNCHER }
+    enum class TabType { TERMINAL, WEBVIEW, LAUNCHER, SAMPLES }
 
     inner class MWVTab(
         val sessionId: String,
@@ -48,6 +48,7 @@ class MainActivity : AppCompatActivity() {
             TabType.TERMINAL -> "💻 ${label.take(6)}"
             TabType.WEBVIEW  -> "🌐 ${label.take(8)}"
             TabType.LAUNCHER -> "📱 ${label.take(6)}"
+            TabType.SAMPLES  -> "📦 ${label.take(6)}"
         }
         fun activeView(): View? = webView ?: contentView
     }
@@ -83,7 +84,11 @@ class MainActivity : AppCompatActivity() {
         buildUI()
         startServices()
         // デフォルトターミナルタブを作成
-        openTab(DEFAULT_TERMINAL, TabType.TERMINAL, "Term")
+openTab(DEFAULT_TERMINAL,              TabType.TERMINAL, "Term")
+        openTab("main_launcher",               TabType.LAUNCHER, "Apps")
+        openTab("main_web",                    TabType.WEBVIEW,  "Web")
+        openTab("main_samples",                TabType.SAMPLES,  "Samples")
+        activateTab(DEFAULT_TERMINAL)
     }
 
     override fun onResume() {
@@ -171,6 +176,7 @@ class MainActivity : AppCompatActivity() {
                 TabType.TERMINAL -> createTerminalTab(sessionId, label)
                 TabType.WEBVIEW  -> createWebViewTab(sessionId, url, label, autoJs)
                 TabType.LAUNCHER -> createLauncherTab(sessionId, label)
+                TabType.SAMPLES  -> createSamplesTab(sessionId, label)
             }
             tabs.add(tab)
             refreshTabBar()
@@ -188,7 +194,11 @@ class MainActivity : AppCompatActivity() {
             tabs.remove(tab)
             if (tabs.isEmpty()) {
                 // ターミナルタブを再作成
-                openTab(DEFAULT_TERMINAL, TabType.TERMINAL, "Term")
+        openTab(DEFAULT_TERMINAL,              TabType.TERMINAL, "Term")
+        openTab("main_launcher",               TabType.LAUNCHER, "Apps")
+        openTab("main_web",                    TabType.WEBVIEW,  "Web")
+        openTab("main_samples",                TabType.SAMPLES,  "Samples")
+        activateTab(DEFAULT_TERMINAL)
             } else {
                 if (activeSession == sessionId) activateTab(tabs.last().sessionId)
                 else refreshTabBar()
@@ -432,6 +442,98 @@ class MainActivity : AppCompatActivity() {
     // ----------------------------------------------------------
     // ランチャーAdapter
     // ----------------------------------------------------------
+    // Samplesタブ生成
+    // ----------------------------------------------------------
+
+    private fun createSamplesTab(sessionId: String, label: String): MWVTab {
+        val samplesDir = android.os.Environment.getExternalStoragePublicDirectory(
+            android.os.Environment.DIRECTORY_DOWNLOADS)
+            .absolutePath + "/MWV-Script/samples/"
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#0a0a0f"))
+        }
+
+        // ヘッダー
+        val header = TextView(this).apply {
+            text = "📦 samples/"
+            setTextColor(Color.parseColor("#555570"))
+            textSize = 11f
+            setPadding(dp(12), dp(8), dp(12), dp(4))
+        }
+        container.addView(header)
+
+        // ファイル一覧
+        val scroll = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+        }
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+        }
+
+        Thread {
+            val dir = java.io.File(samplesDir)
+            if (!dir.exists()) dir.mkdirs()
+            val files = dir.listFiles()
+                ?.filter { it.name.endsWith(".rjs") || it.name.endsWith(".js") }
+                ?.sortedBy { it.name }
+                ?: emptyList()
+
+            mainHandler.post {
+                if (files.isEmpty()) {
+                    list.addView(TextView(this).apply {
+                        text = "samples/ にファイルがありません"
+                        setTextColor(Color.parseColor("#555570"))
+                        textSize = 12f
+                        gravity = Gravity.CENTER
+                        setPadding(dp(16), dp(32), dp(16), dp(16))
+                    })
+                }
+                files.forEach { file ->
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        setBackgroundColor(Color.parseColor("#1e1e2e"))
+                        val lp = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT,
+                            LinearLayout.LayoutParams.WRAP_CONTENT)
+                        lp.setMargins(0, dp(1), 0, 0)
+                        layoutParams = lp
+                    }
+                    val nameView = TextView(this).apply {
+                        text = file.name
+                        setTextColor(Color.parseColor("#aaaacc"))
+                        textSize = 12f
+                        typeface = Typeface.MONOSPACE
+                        setPadding(dp(12), dp(12), dp(4), dp(12))
+                        layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    }
+                    val runBtn = TextView(this).apply {
+                        text = " ▶ "
+                        setTextColor(Color.parseColor("#00ff88"))
+                        textSize = 13f
+                        setPadding(dp(8), dp(12), dp(12), dp(12))
+                        setOnClickListener {
+                            HubService.instance?.loadAndExecute(file.absolutePath)
+                            appendOutput("> load("samples/${file.name}")")
+                            activateTab(DEFAULT_TERMINAL)
+                        }
+                    }
+                    row.addView(nameView)
+                    row.addView(runBtn)
+                    list.addView(row)
+                }
+            }
+        }.start()
+
+        scroll.addView(list)
+        container.addView(scroll)
+        return MWVTab(sessionId, TabType.SAMPLES, label, contentView = container)
+    }
+
+    // ----------------------------------------------------------
     inner class LauncherAdapter(
         private val allItems: List<android.content.pm.ResolveInfo>,
         private val pm: PackageManager
@@ -516,11 +618,12 @@ class MainActivity : AppCompatActivity() {
     private fun showNewTabDialog() {
         android.app.AlertDialog.Builder(this)
             .setTitle("新規タブ")
-            .setItems(arrayOf("💻 ターミナル", "🌐 WebView", "📱 ランチャー")) { _, which ->
+            .setItems(arrayOf("💻 ターミナル", "🌐 WebView", "📱 ランチャー", "📦 Samples")) { _, which ->
                 when (which) {
                     0 -> openTab("term_${System.currentTimeMillis()}", TabType.TERMINAL, "Term")
                     1 -> showUrlInputDialog()
                     2 -> openTab("apps_${System.currentTimeMillis()}", TabType.LAUNCHER, "Apps")
+                    3 -> openTab("samples_${System.currentTimeMillis()}", TabType.SAMPLES, "Samples")
                 }
             }.show()
     }
