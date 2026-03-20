@@ -211,8 +211,7 @@ class MainActivity : AppCompatActivity() {
             if (current.isEmpty()) {
                 et.setText(text)
             } else {
-                current.append("
-$text")
+                current.append("\n$text")
             }
             sv.post { sv.fullScroll(ScrollView.FOCUS_DOWN) }
         }
