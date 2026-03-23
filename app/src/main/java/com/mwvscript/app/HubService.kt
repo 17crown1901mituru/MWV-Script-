@@ -21,7 +21,7 @@ class HubService : Service() {
         instance = this
         
         // 【1箇所目の追加】サービス起動時にShizukuへの接続を開始する
-        ShizukuBridge.bind()
+        ShizukuBridge.bind(this)
         
         initRhino()
         isReady = true
