@@ -9,6 +9,8 @@ import android.os.*
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.faendir.rhino_android.RhinoAndroidHelper
+import rikka.shizuku.Shizuku
+import rikka.shizuku.ShizukuRemoteProcess
 import org.mozilla.javascript.*
 import org.mozilla.javascript.Context as RhinoContext
 
@@ -540,6 +542,89 @@ class HubService : Service() {
         })
 
         ScriptableObject.putProperty(scope, "shred", shred)
+
+
+        // ---- shizuku オブジェクト ----
+        // ADB権限でコマンドを実行するブリッジ
+        // 使い方:
+        //   shizuku.exec("cmd", function(out){ print(out); })
+        //   shizuku.isRunning()      → Boolean
+        //   shizuku.isGranted()      → Boolean
+        //   shizuku.requestPermission()
+        val cxShizuku = RhinoContext.enter()
+        cxShizuku.optimizationLevel = -1
+        val shizukuObj = cxShizuku.newObject(scope) as ScriptableObject
+        RhinoContext.exit()
+
+        // shizuku.isRunning() — Shizukuサービスが起動しているか
+        ScriptableObject.putProperty(shizukuObj, "isRunning", object : BaseFunction() {
+            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
+                return try { Shizuku.pingBinder() } catch (e: Exception) { false }
+            }
+        })
+
+        // shizuku.isGranted() — 権限が付与されているか
+        ScriptableObject.putProperty(shizukuObj, "isGranted", object : BaseFunction() {
+            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
+                return try {
+                    Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
+                } catch (e: Exception) { false }
+            }
+        })
+
+        // shizuku.requestPermission() — 権限をリクエスト（ダイアログ表示）
+        ScriptableObject.putProperty(shizukuObj, "requestPermission", object : BaseFunction() {
+            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
+                try {
+                    Shizuku.requestPermission(1001)
+                } catch (e: Exception) {
+                    Log.e(TAG, "shizuku.requestPermission: ${e.message}")
+                }
+                return RhinoContext.getUndefinedValue()
+            }
+        })
+
+        // shizuku.exec(cmd, callback?) — ADB権限でコマンドを実行
+        ScriptableObject.putProperty(shizukuObj, "exec", object : BaseFunction() {
+            override fun call(cx: RhinoContext, scope: Scriptable, thisObj: Scriptable?, args: Array<out Any?>): Any? {
+                val cmd      = RhinoContext.toString(args.getOrNull(0) ?: "")
+                val callback = args.getOrNull(1) as? org.mozilla.javascript.Function
+                Thread {
+                    var output = ""
+                    try {
+                        // Shizuku未起動 or 権限なしならエラー
+                        if (!Shizuku.pingBinder()) {
+                            output = "ERROR: Shizuku is not running"
+                            Log.e(TAG, output)
+                        } else if (Shizuku.checkSelfPermission() != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            output = "ERROR: Shizuku permission not granted"
+                            Log.e(TAG, output)
+                        } else {
+                            // ShizukuRemoteProcess でADB権限のshを起動
+                            val process = ShizukuRemoteProcess("sh", arrayOf("sh", "-c", cmd), null)
+                            val out  = process.inputStream.bufferedReader().readText()
+                            val err  = process.errorStream.bufferedReader().readText()
+                            process.waitFor()
+                            output = if (err.isNotEmpty()) err else out
+                        }
+                    } catch (e: Exception) {
+                        output = "ERROR: ${e.message}"
+                        Log.e(TAG, "shizuku.exec: ${e.message}")
+                    }
+                    if (callback != null) {
+                        val result = output
+                        val cx2 = RhinoContext.enter()
+                        cx2.optimizationLevel = -1
+                        try     { callback.call(cx2, scope, scope, arrayOf(result)) }
+                        catch (e: Exception) { Log.e(TAG, "shizuku.exec callback: ${e.message}") }
+                        finally { RhinoContext.exit() }
+                    }
+                }.start()
+                return RhinoContext.getUndefinedValue()
+            }
+        })
+
+        ScriptableObject.putProperty(scope, "shizuku", shizukuObj)
 
         Log.d(TAG, "標準ブリッジ注入完了")
     }
