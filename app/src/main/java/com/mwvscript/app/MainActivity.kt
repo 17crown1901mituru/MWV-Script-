@@ -77,15 +77,20 @@ class MainActivity : AppCompatActivity() {
     // ライフサイクル
     // ----------------------------------------------------------
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+        override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         instance = this
         requestPermissions()
         buildUI()
+        
+        // --- 追加：Shizukuのバインド ---
+        ShizukuBridge.bind() 
+        
         startServices()
         // デフォルトターミナルタブを作成
         openTab(DEFAULT_TERMINAL, TabType.TERMINAL, "Term")
     }
+
 
     override fun onResume() {
         super.onResume()
@@ -867,10 +872,39 @@ class MainActivity : AppCompatActivity() {
         floatingDrawerBtn = null
     }
 
-    // ----------------------------------------------------------
+        // ----------------------------------------------------------
     // ユーティリティ
     // ----------------------------------------------------------
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
     private fun findTab(sessionId: String) = tabs.firstOrNull { it.sessionId == sessionId }
-}
+
+    // --- 追加：ShizukuBridgeの実装 ---
+    object ShizukuBridge {
+        private var userService: IUserService? = null
+
+        private val connection = object : android.content.ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                userService = IUserService.Stub.asInterface(service)
+            }
+            override fun onServiceDisconnected(name: ComponentName?) {
+                userService = null
+            }
+        }
+
+        private val userServiceArgs = rikka.shizuku.Shizuku.UserServiceArgs(
+            ComponentName(instance?.packageName ?: "com.mwvscript.app", UserService::class.java.name)
+        ).daemon(false).processNameSuffix("shizuku_service").debuggable(true)
+
+        fun bind() {
+            if (rikka.shizuku.Shizuku.pingBinder()) {
+                rikka.shizuku.Shizuku.bindUserService(userServiceArgs, connection)
+            }
+        }
+
+        @android.webkit.JavascriptInterface // Rhinoから安全に呼ぶため
+        fun runShell(command: String): String {
+            return userService?.exec(command) ?: "Service not connected"
+        }
+    }
+} 
