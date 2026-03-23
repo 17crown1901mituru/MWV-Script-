@@ -1,16 +1,16 @@
 package com.mwvscript.app
 
-import android.os.IBinder
+import android.os.Process
 import com.mwvscript.app.IUserService
-import java.io.BufferedReader
-import java.io.InputStreamReader
 
 class UserService : IUserService.Stub() {
-    override fun exec(command: String): String {
+    
+    // IUserService.aidl のメソッド実装
+    override fun exec(command: String?): String {
+        if (command.isNullOrBlank()) return ""
         return try {
             val process = Runtime.getRuntime().exec(command)
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            val result = reader.readText()
+            val result = process.inputStream.bufferedReader().use { it.readText() }
             process.waitFor()
             result
         } catch (e: Exception) {
@@ -19,6 +19,7 @@ class UserService : IUserService.Stub() {
     }
 
     override fun destroy() {
-        System.exit(0)
+        // サービス終了時にプロセスを確実に殺す
+        Process.killProcess(Process.myPid())
     }
 }
