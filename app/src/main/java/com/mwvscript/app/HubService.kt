@@ -1,36 +1,67 @@
-import android.content.ComponentName
-import android.content.ServiceConnection
-import android.os.IBinder
+package com.mwvscript.app
+
+import android.app.*
+import android.content.Intent
+import android.os.*
 import rikka.shizuku.Shizuku
-import com.mwvscript.app.IUserService
+import org.mozilla.javascript.Context
+import org.mozilla.javascript.ScriptableObject
 
-object ShizukuBridge {
-    private var userService: IUserService? = null
+class HubService : Service() {
 
+    companion object {
+        var instance: HubService? = null
+        var isReady = false
+    }
 
-    private val connection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            userService = IUserService.Stub.asInterface(service)
-        }
+    private lateinit var globalScope: ScriptableObject
 
-        override fun onServiceDisconnected(name: ComponentName?) {
-            userService = null
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+        
+        // 【1箇所目の追加】サービス起動時にShizukuへの接続を開始する
+        ShizukuBridge.bind()
+        
+        initRhino()
+        isReady = true
+    }
+
+    private fun initRhino() {
+        val ctx = Context.enter()
+        ctx.optimizationLevel = -1
+        try {
+            // JavaScriptの実行環境（Scope）を作成
+            globalScope = ctx.initStandardObjects()
+
+            // 【2箇所目の追加】JS側で "shizuku" という名前で呼べるように登録する
+            // これにより、JSから shizuku.runShell() が使えるようになります。
+            ScriptableObject.putProperty(
+                globalScope, 
+                "shizuku", 
+                Context.javaToJS(ShizukuBridge, globalScope)
+            )
+
+            // その他の初期化（パスの登録など）
+            // loadInitScript() 
+        } finally {
+            Context.exit()
         }
     }
 
-    private val userServiceArgs = Shizuku.UserServiceArgs(
-        ComponentName("com.mwvscript.app", UserService::class.java.name)
-    ).daemon(false).processNameSuffix("shizuku_service").debuggable(true)
-
-    // サービスのバインドを開始
-    fun bind() {
-        if (Shizuku.pingBinder()) {
-            Shizuku.bindUserService(userServiceArgs, connection)
-        }
+    // JSを実行するメソッド
+    fun executeAsync(code: String) {
+        Thread {
+            val ctx = Context.enter()
+            try {
+                ctx.evaluateString(globalScope, code, "remote", 1, null)
+            } catch (e: Exception) {
+                // エラー処理
+            } finally {
+                Context.exit()
+            }
+        }.start()
     }
 
-    // コマンド実行用関数 (rjsから叩く受口)
-    fun runShell(command: String): String {
-        return userService?.exec(command) ?: "Service not connected"
-    }
+    override fun onBind(intent: Intent?): IBinder? = null
 }
