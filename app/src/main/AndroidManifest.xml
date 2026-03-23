@@ -239,6 +239,16 @@
             </intent-filter>
         </receiver>
 
+
+        <!-- ShizukuProvider — Shizuku権限ブリッジ -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="com.mwvscript.app.shizuku"
+            android:exported="true"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
         <!-- FileProvider -->
         <provider
             android:name="androidx.core.content.FileProvider"
