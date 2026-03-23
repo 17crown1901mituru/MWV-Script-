@@ -7,6 +7,10 @@ import com.mwvscript.app.IUserService
 object ShizukuBridge {
     private var userService: IUserService? = null
 
+    // HubService内のスコープ初期化箇所
+ScriptableObject.putProperty(scope, "shizuku", Context.javaToJS(MainActivity.ShizukuBridge, scope))
+
+
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             userService = IUserService.Stub.asInterface(service)
