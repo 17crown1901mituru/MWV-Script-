@@ -1,67 +1,73 @@
 package com.mwvscript.app
 
-import android.app.*
+import android.app.Service
 import android.content.Intent
-import android.os.*
-import rikka.shizuku.Shizuku
+import android.os.IBinder
 import org.mozilla.javascript.Context
-import org.mozilla.javascript.ScriptableObject
+import org.mozilla.javascript.Scriptable
 
 class HubService : Service() {
 
     companion object {
+        @JvmStatic
         var instance: HubService? = null
-        var isReady = false
-    }
+            private set
 
-    private lateinit var globalScope: ScriptableObject
+        // 他のサービス（Accessibility, Tile等）から参照されるグローバルスコープ
+        @JvmStatic
+        var rhinoScope: Scriptable? = null
+
+        // インテント用定数
+        const val ACTION_BOOT = "com.mwvscript.app.ACTION_BOOT"
+        const val ACTION_EXECUTE = "com.mwvscript.app.ACTION_EXECUTE"
+        const val EXTRA_SCRIPT = "extra_script"
+
+        // スクリプトのロードと実行（MainActivity等から呼ばれる）
+        @JvmStatic
+        fun loadAndExecute(scriptContent: String) {
+            val context = Context.enter()
+            try {
+                context.optimizationLevel = -1
+                val scope = rhinoScope ?: return
+                context.evaluateString(scope, scriptContent, "remote_script", 1, null)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                Context.exit()
+            }
+        }
+
+        // init.rjs の再読み込み
+        @JvmStatic
+        fun reloadInit() {
+            // ここに init.rjs を再度読み込むロジックを実装
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
         instance = this
-        
-        // 【1箇所目の追加】サービス起動時にShizukuへの接続を開始する
+
+        // ShizukuBridgeをバインド (Contextとしてthisを渡す)
         ShizukuBridge.bind(this)
-        
-        initRhino()
-        isReady = true
-    }
 
-    private fun initRhino() {
-        val ctx = Context.enter()
-        ctx.optimizationLevel = -1
+        // Rhino エンジンの初期化
+        val rhinoContext = Context.enter()
         try {
-            // JavaScriptの実行環境（Scope）を作成
-            globalScope = ctx.initStandardObjects()
-
-            // 【2箇所目の追加】JS側で "shizuku" という名前で呼べるように登録する
-            // これにより、JSから shizuku.runShell() が使えるようになります。
-            ScriptableObject.putProperty(
-                globalScope, 
-                "shizuku", 
-                Context.javaToJS(ShizukuBridge, globalScope)
-            )
-
-            // その他の初期化（パスの登録など）
-            // loadInitScript() 
+            rhinoContext.optimizationLevel = -1
+            rhinoScope = rhinoContext.initStandardObjects()
+            // ここに shizuku オブジェクトなどの初期登録ロジックを追加可能
+        } catch (e: Exception) {
+            e.printStackTrace()
         } finally {
             Context.exit()
         }
     }
 
-    // JSを実行するメソッド
-    fun executeAsync(code: String) {
-        Thread {
-            val ctx = Context.enter()
-            try {
-                ctx.evaluateString(globalScope, code, "remote", 1, null)
-            } catch (e: Exception) {
-                // エラー処理
-            } finally {
-                Context.exit()
-            }
-        }.start()
-    }
-
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        instance = null
+        super.onDestroy()
+    }
 }
