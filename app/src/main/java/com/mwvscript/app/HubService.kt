@@ -10,7 +10,6 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.faendir.rhino_android.RhinoAndroidHelper
 import rikka.shizuku.Shizuku
-import rikka.shizuku.ShizukuRemoteProcess
 import org.mozilla.javascript.*
 import org.mozilla.javascript.Context as RhinoContext
 
@@ -600,8 +599,8 @@ class HubService : Service() {
                             output = "ERROR: Shizuku permission not granted"
                             Log.e(TAG, output)
                         } else {
-                            // ShizukuRemoteProcess でADB権限のshを起動
-                            val process = ShizukuRemoteProcess("sh", arrayOf("sh", "-c", cmd), null)
+                            // Shizuku.newProcess() でADB権限のshを起動
+                            val process = Shizuku.newProcess(arrayOf("sh", "-c", cmd), null, null)
                             val out  = process.inputStream.bufferedReader().readText()
                             val err  = process.errorStream.bufferedReader().readText()
                             process.waitFor()
