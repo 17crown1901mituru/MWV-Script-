@@ -70,4 +70,8 @@ dependencies {
     // AndroidContextFactory（API 26以上でInMemoryAndroidClassLoader使用）を内包
     implementation 'com.faendir.rhino:rhino-android:1.6.0'
     implementation 'org.mozilla:rhino-runtime:1.7.13'
+
+    // Shizuku — ADB権限ブリッジ
+    implementation 'dev.rikka.shizuku:api:13.1.5'
+    implementation 'dev.rikka.shizuku:provider:13.1.5'
 }
