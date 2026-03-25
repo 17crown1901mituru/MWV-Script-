@@ -1,0 +1,73 @@
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+android {
+    namespace 'com.mwvscript.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.mwvscript.app"
+        minSdk 26
+        targetSdk 34
+        versionCode 2
+        versionName "2.0.0"
+        multiDexEnabled true
+        multiDexKeepFile file('multidex-config.txt')
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    // JAS assets を assets/ に取り込む
+    // assets/libs/ 以下の JS ライブラリ（Babel, TypeScript, Brython 等）が
+    // rjs から WebView 経由で利用可能になる
+    sourceSets {
+        main {
+            assets.srcDirs = ['src/main/assets']
+        }
+    }
+
+    packaging {
+        resources {
+            excludes += [
+                'META-INF/DEPENDENCIES',
+                'META-INF/LICENSE',
+                'META-INF/LICENSE.txt',
+                'META-INF/NOTICE',
+                'META-INF/NOTICE.txt'
+            ]
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.multidex:multidex:2.0.1'
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.lifecycle:lifecycle-service:2.7.0'
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    // Rhino JS engine for Android
+    // rhino-android-1.6.0 のソース内容は com.faendir.rhino:rhino-android:1.6.0 と同一
+    // AndroidContextFactory（API 26以上でInMemoryAndroidClassLoader使用）を内包
+    implementation 'com.faendir.rhino:rhino-android:1.6.0'
+    implementation 'org.mozilla:rhino-runtime:1.7.13'
+}
