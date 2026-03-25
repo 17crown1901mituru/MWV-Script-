@@ -1,0 +1,414 @@
+// ============================================================
+// drawer.rjs - 5タブ統合ドロワー
+// SCRIPT / DEV / SAMPLES / API / SETTINGS
+// ============================================================
+
+var SCRIPT_DIR  = "/storage/emulated/0/download/MWV-Script/Script/";
+var DEV_DIR     = "/storage/emulated/0/download/MWV-Script/Dev/";
+var SAMPLES_DIR = "/storage/emulated/0/download/MWV-Script/samples/";
+var Color       = Packages.android.graphics.Color;
+var wm          = ctx.getSystemService(Packages.android.content.Context.WINDOW_SERVICE);
+var handler     = new Packages.android.os.Handler(Packages.android.os.Looper.getMainLooper());
+
+var PARAMS_TYPE  = Packages.android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+var FLAG_NOT_FOC = Packages.android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+var FLAG_MODAL   = Packages.android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+var MATCH_PARENT = Packages.android.view.ViewGroup.LayoutParams.MATCH_PARENT;
+var WRAP_CONTENT = Packages.android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
+var GRAVITY      = Packages.android.view.Gravity;
+var MotionEvent  = Packages.android.view.MotionEvent;
+
+var drawerView      = null;
+var isOpen          = false;
+var currentTab      = "script"; // script / dev / samples / api / settings
+var webViewEnabled  = true;
+var launcherEnabled = false;
+
+// APIタブの出力ログ
+var apiLogLines = [];
+var apiLogView  = null;
+var apiScroll   = null;
+
+// SAMPLESタブ: WebViewデフォルトURL
+var defaultWebUrl  = "https://www.google.com";
+var BOOKMARK_PATH  = "/storage/emulated/0/download/MWV-Script/bookmark.json";
+var SETTINGS_PATH  = "/storage/emulated/0/download/MWV-Script/drawer_settings.json";
+
+// 設定読み込み・保存
+function loadSettings() {
+    try {
+        var f = new Packages.java.io.File(SETTINGS_PATH);
+        if (!f.exists()) return {};
+        var br = new Packages.java.io.BufferedReader(new Packages.java.io.FileReader(f));
+        var sb = new Packages.java.lang.StringBuilder();
+        var line;
+        while ((line = br.readLine()) !== null) sb.append(line);
+        br.close();
+        return JSON.parse(sb.toString());
+    } catch(e) { return {}; }
+}
+function saveSettings(obj) {
+    try {
+        var f = new Packages.java.io.File(SETTINGS_PATH);
+        f.getParentFile().mkdirs();
+        var fw = new Packages.java.io.FileWriter(f);
+        fw.write(JSON.stringify(obj, null, 2));
+        fw.close();
+    } catch(e) {}
+}
+
+// 起動時に設定を反映
+(function() {
+    var s = loadSettings();
+    if (s.defaultWebUrl) defaultWebUrl = s.defaultWebUrl;
+})();
+
+// ブックマーク読み込み（空配列を返すだけ、ファイルがなくてもOK）
+function loadBookmarks() {
+    try {
+        var f = new Packages.java.io.File(BOOKMARK_PATH);
+        if (!f.exists()) return [];
+        var br = new Packages.java.io.BufferedReader(new Packages.java.io.FileReader(f));
+        var sb = new Packages.java.lang.StringBuilder();
+        var line;
+        while ((line = br.readLine()) !== null) sb.append(line);
+        br.close();
+        return JSON.parse(sb.toString());
+    } catch(e) { return []; }
+}
+
+// ブックマーク保存
+function saveBookmarks(list) {
+    try {
+        var f = new Packages.java.io.File(BOOKMARK_PATH);
+        f.getParentFile().mkdirs();
+        var fw = new Packages.java.io.FileWriter(f);
+        fw.write(JSON.stringify(list));
+        fw.close();
+    } catch(e) { print("[bookmark] 保存エラー: " + e); }
+}
+
+function dp(v) {
+    return Math.round(v * ctx.getResources().getDisplayMetrics().density);
+}
+
+function getFiles(dir) {
+    var d = new Packages.java.io.File(dir);
+    if (!d.exists()) d.mkdirs();
+    var result = [];
+    (function walk(d) {
+        var files = d.listFiles();
+        if (!files) return;
+        for (var i = 0; i < files.length; i++) {
+            var f = files[i];
+            if (f.isDirectory()) walk(f);
+            else if (f.getName().endsWith(".rjs") || f.getName().endsWith(".js"))
+                result.push(f);
+        }
+    })(d);
+    result.sort(function(a, b) { return a.getName().localeCompare(b.getName()); });
+    return result;
+}
+
+// ======================================================
+// APIタブへの出力（print()から呼ばれる想定）
+// ======================================================
+function apiPrint(msg) {
+    apiLogLines.push(msg);
+    if (apiLogLines.length > 200) apiLogLines.shift();
+    if (apiLogView != null) {
+        handler.post(new Packages.java.lang.Runnable({ run: function() {
+            try {
+                var tv = new Packages.android.widget.TextView(ctx);
+                tv.setText(msg);
+                tv.setTextColor(Color.parseColor("#00ff88"));
+                tv.setTextSize(11);
+                tv.setTypeface(Packages.android.graphics.Typeface.MONOSPACE);
+                tv.setPadding(0, 1, 0, 1);
+                apiLogView.addView(tv);
+                if (apiScroll != null) {
+                    apiScroll.post(new Packages.java.lang.Runnable({ run: function() {
+                        apiScroll.fullScroll(Packages.android.view.View.FOCUS_DOWN);
+                    }}));
+                }
+            } catch(e) {}
+        }}));
+    }
+}
+
+// ======================================================
+// ドロワー本体
+// ======================================================
+function buildDrawer() {
+    var root = new Packages.android.widget.LinearLayout(ctx);
+    root.setOrientation(Packages.android.widget.LinearLayout.HORIZONTAL);
+    root.setBackgroundColor(Color.TRANSPARENT);
+
+    // 暗幕
+    var dim = new Packages.android.widget.FrameLayout(ctx);
+    dim.setLayoutParams(new Packages.android.widget.LinearLayout.LayoutParams(0, MATCH_PARENT, 1));
+    dim.setBackgroundColor(Color.parseColor("#99000000"));
+    dim.setOnClickListener(new Packages.android.view.View.OnClickListener({
+        onClick: function() { bThread(function() { closeDrawer(); }); }
+    }));
+
+    // パネル
+    var panel = new Packages.android.widget.LinearLayout(ctx);
+    panel.setOrientation(Packages.android.widget.LinearLayout.VERTICAL);
+    panel.setLayoutParams(new Packages.android.widget.LinearLayout.LayoutParams(dp(300), MATCH_PARENT));
+    panel.setBackgroundColor(Color.parseColor("#1a1a2e"));
+    panel.setPadding(0, dp(40), 0, 0);
+
+    // ヘッダー
+    var header = new Packages.android.widget.LinearLayout(ctx);
+    header.setBackgroundColor(Color.parseColor("#16213e"));
+    header.setPadding(dp(16), dp(10), dp(8), dp(10));
+
+    var title = new Packages.android.widget.TextView(ctx);
+    title.setText("MWV Script");
+    title.setTextColor(Color.parseColor("#e94560"));
+    title.setTextSize(15);
+    title.setTypeface(null, Packages.android.graphics.Typeface.BOLD);
+    title.setLayoutParams(new Packages.android.widget.LinearLayout.LayoutParams(0, WRAP_CONTENT, 1));
+
+    var reloadBtn = new Packages.android.widget.TextView(ctx);
+    reloadBtn.setText(" \u21ba ");
+    reloadBtn.setTextColor(Color.parseColor("#a8a8b3"));
+    reloadBtn.setTextSize(18);
+    reloadBtn.setOnClickListener(new Packages.android.view.View.OnClickListener({
+        onClick: function() { bThread(function() { reopenDrawer(); }); }
+    }));
+
+    header.addView(title);
+    header.addView(reloadBtn);
+
+    // ======================================================
+    // タブバー（横スクロール対応）
+    // ======================================================
+    var tabScroll = new Packages.android.widget.HorizontalScrollView(ctx);
+    tabScroll.setHorizontalScrollBarEnabled(false);
+    tabScroll.setBackgroundColor(Color.parseColor("#0f0f1e"));
+    tabScroll.setLayoutParams(new Packages.android.widget.LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT));
+
+    var tabBar = new Packages.android.widget.LinearLayout(ctx);
+    tabBar.setBackgroundColor(Color.parseColor("#0f0f1e"));
+    tabScroll.addView(tabBar);
+
+    var tabs    = ["SCRIPT", "DEV", "TABS", "TERM", "CONSOLE", "API", "\u2699"];
+    var tabKeys = ["script", "dev", "tabs", "terminal", "console", "api", "settings"];
+    var tabViews = [];
+
+    for (var ti = 0; ti < tabs.length; ti++) {
+        (function(idx) {
+            var tv = new Packages.android.widget.TextView(ctx);
+            tv.setText(tabs[idx]);
+            tv.setTextSize(10);
+            tv.setTypeface(null, Packages.android.graphics.Typeface.BOLD);
+            tv.setGravity(Packages.android.view.Gravity.CENTER);
+            tv.setPadding(dp(14), dp(10), dp(14), dp(10));
+            tv.setLayoutParams(new Packages.android.widget.LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT));
+            tabViews.push(tv);
+            tabBar.addView(tv);
+            tv.setOnClickListener(new Packages.android.view.View.OnClickListener({
+                onClick: function() {
+                    currentTab = tabKeys[idx];
+                    bThread(function() { reopenDrawer(); });
+                }
+            }));
+        })(ti);
+    }
+
+    for (var ti = 0; ti < tabViews.length; ti++) {
+        if (tabKeys[ti] === currentTab) {
+            tabViews[ti].setTextColor(Color.parseColor("#e94560"));
+            tabViews[ti].setBackgroundColor(Color.parseColor("#1a1a2e"));
+        } else {
+            tabViews[ti].setTextColor(Color.parseColor("#555570"));
+            tabViews[ti].setBackgroundColor(Color.parseColor("#0f0f1e"));
+        }
+    }
+
+    // ======================================================
+    // コンテンツエリア
+    // ======================================================
+    var content = new Packages.android.widget.FrameLayout(ctx);
+    content.setLayoutParams(new Packages.android.widget.LinearLayout.LayoutParams(MATCH_PARENT, 0, 1));
+
+    if (currentTab === "script") {
+        content.addView(buildFileTab(SCRIPT_DIR));
+    } else if (currentTab === "dev") {
+        content.addView(buildFileTab(DEV_DIR));
+    } else if (currentTab === "samples") {
+        content.addView(buildSamplesTab());
+    } else if (currentTab === "tabs") {
+        content.addView(buildTabsTab());
+    } else if (currentTab === "terminal") {
+        content.addView(buildTerminalTab());
+    } else if (currentTab === "console") {
+        content.addView(buildConsoleTab());
+    } else if (currentTab === "api") {
+        content.addView(buildApiTab());
+    } else if (currentTab === "settings") {
+        content.addView(buildSettingsTab());
+    }
+
+    panel.addView(header);
+    panel.addView(tabScroll);
+    panel.addView(content);
+    root.addView(dim);
+    root.addView(panel);
+    return root;
+}
+
+// ======================================================
+// SCRIPTタブ / DEVタブ（共通）
+// ======================================================
+function buildFileTab(dir) {
+    var files = getFiles(dir);
+
+    var root = new Packages.android.widget.LinearLayout(ctx);
+    root.setOrientation(Packages.android.widget.LinearLayout.VERTICAL);
+    root.setLayoutParams(new Packages.android.widget.FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT));
+
+    var scroll = new Packages.android.widget.ScrollView(ctx);
+    scroll.setLayoutParams(new Packages.android.widget.LinearLayout.LayoutParams(MATCH_PARENT, 0, 1));
+
+    var list = new Packages.android.widget.LinearLayout(ctx);
+    list.setOrientation(Packages.android.widget.LinearLayout.VERTICAL);
+    list.setPadding(0, dp(4), 0, dp(4));
+
+    if (files.length === 0) {
+        var empty = new Packages.android.widget.TextView(ctx);
+        empty.setText("スクリプトが見つかりません\n" + dir);
+        empty.setTextColor(Color.parseColor("#555570"));
+        empty.setTextSize(12);
+        empty.setPadding(dp(16), dp(16), dp(16), dp(16));
+        list.addView(empty);
+    } else {
+        for (var i = 0; i < files.length; i++) {
+            list.addView(buildFileItem(files[i]));
+        }
+    }
+    scroll.addView(list);
+
+    var footer = buildFileFooter(dir);
+    root.addView(scroll);
+    root.addView(footer);
+    return root;
+}
+
+function buildFileItem(file) {
+    var filePath = file.getAbsolutePath();
+    var fileName = file.getName();
+
+    var wrap = new Packages.android.widget.LinearLayout(ctx);
+    wrap.setOrientation(Packages.android.widget.LinearLayout.VERTICAL);
+
+    var item = new Packages.android.widget.LinearLayout(ctx);
+    item.setOrientation(Packages.android.widget.LinearLayout.VERTICAL);
+    item.setPadding(dp(16), dp(10), dp(16), dp(10));
+
+    var nameView = new Packages.android.widget.TextView(ctx);
+    nameView.setText(fileName);
+    nameView.setTextColor(Color.parseColor("#e2e2e8"));
+    nameView.setTextSize(13);
+    item.addView(nameView);
+
+    item.setOnClickListener(new Packages.android.view.View.OnClickListener({
+        onClick: function() {
+            bThread(function() {
+                closeDrawer();
+                load(filePath);
+            });
+        }
+    }));
+
+    item.setOnLongClickListener(new Packages.android.view.View.OnLongClickListener({
+        onLongClick: function() {
+            bThread(function() {
+                var choices = ["\u25b6 実行", "\ud83d\udccb ターミナルに入力", "\ud83d\udd04 タイルに登録"];
+                handler.post(new Packages.java.lang.Runnable({ run: function() {
+                    new Packages.android.app.AlertDialog.Builder(actCtx || ctx)
+                        .setTitle(fileName)
+                        .setItems(choices, new Packages.android.content.DialogInterface.OnClickListener({
+                            onClick: function(d, which) {
+                                bThread(function() {
+                                    if (which === 0) { closeDrawer(); load(filePath); }
+                                    else if (which === 1) { closeDrawer(); terminal.setInput("load('" + filePath + "')"); }
+                                    else if (which === 2) { tile.set("load('" + filePath + "')", fileName.replace(/\.[^.]+$/, "")); popup("タイル登録: " + fileName); }
+                                });
+                            }
+                        }))
+                        .show();
+                }}));
+            });
+            return true;
+        }
+    }));
+
+    item.setOnTouchListener(new Packages.android.view.View.OnTouchListener({
+        onTouch: function(v, e) {
+            var a = e.getAction();
+            if (a === MotionEvent.ACTION_DOWN) v.setBackgroundColor(Color.parseColor("#2a2a3e"));
+            else if (a === MotionEvent.ACTION_UP || a === MotionEvent.ACTION_CANCEL) v.setBackgroundColor(Color.TRANSPARENT);
+            return false;
+        }
+    }));
+
+    var sep = new Packages.android.view.View(ctx);
+    sep.setBackgroundColor(Color.parseColor("#2a2a3e"));
+    sep.setLayoutParams(new Packages.android.widget.LinearLayout.LayoutParams(MATCH_PARENT, 1));
+
+    wrap.addView(item);
+    wrap.addView(sep);
+    return wrap;
+}
+
+function buildFileFooter(dir) {
+    var footer = new Packages.android.widget.LinearLayout(ctx);
+    footer.setBackgroundColor(Color.parseColor("#16213e"));
+    footer.setPadding(dp(8), dp(6), dp(8), dp(6));
+
+    var newBtn = new Packages.android.widget.TextView(ctx);
+    newBtn.setText("\uff0b  新規スクリプト");
+    newBtn.setTextColor(Color.parseColor("#e94560"));
+    newBtn.setTextSize(13);
+    newBtn.setPadding(dp(8), dp(10), dp(8), dp(10));
+    newBtn.setLayoutParams(new Packages.android.widget.LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT));
+    newBtn.setOnClickListener(new Packages.android.view.View.OnClickListener({
+        onClick: function() {
+            bThread(function() {
+                closeDrawer();
+                var name = prompt("ファイル名（.rjs）", "new_script.rjs", "新規作成");
+                if (name) {
+                    var f = new Packages.java.io.File(dir + name);
+                    f.getParentFile().mkdirs();
+                    f.createNewFile();
+                    popup("作成: " + name);
+                }
+            });
+        }
+    }));
+    footer.addView(newBtn);
+    return footer;
+}
+
+// ======================================================
+// 各タブのビルド関数を外部ファイルから読み込む
+// ======================================================
+var DRAWER_DIR = "/storage/emulated/0/download/MWV-Script/Drawer/";
+
+function loadDrawerModule(name) {
+    try {
+        load(DRAWER_DIR + name);
+    } catch(e) {
+        print("[drawer] モジュール読み込み失敗: " + name + " / " + e);
+    }
+}
+
+loadDrawerModule("drawer_script.rjs");
+loadDrawerModule("drawer_tabs.rjs");
+loadDrawerModule("drawer_console.rjs");
+loadDrawerModule("drawer_terminal.rjs");
+loadDrawerModule("drawer_api.rjs");
+loadDrawerModule("drawer_settings.rjs");

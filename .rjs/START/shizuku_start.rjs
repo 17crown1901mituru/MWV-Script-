@@ -1,0 +1,84 @@
+// ============================================================
+// shizuku_start.rjs
+// Shizuku経由でワイヤレスデバッグON + adbd起動まで同期で完了する
+// init.rjs から loadDir("START") で呼ばれる想定
+// adb.rjs より先に実行されること
+// ============================================================
+
+(function() {
+
+var ADB_PORT = 5555;
+
+function log(msg) { print("[shizuku] " + msg); }
+
+// Shizuku起動確認
+if (!shizuku.isRunning()) {
+    log("Shizuku未起動 → Shizukuアプリを起動してサービスを開始してください");
+    popup("Shizukuが起動していません\nShizukuアプリを開いて「開始」を押してください");
+    return;
+}
+
+// 権限確認・リクエスト
+if (!shizuku.isGranted()) {
+    log("Shizuku権限未付与 → 権限をリクエストします");
+    shizuku.requestPermission();
+    // ダイアログ操作を最大10秒待つ
+    var waited = 0;
+    while (!shizuku.isGranted() && waited < 10000) {
+        java.lang.Thread.sleep(500);
+        waited += 500;
+    }
+    if (!shizuku.isGranted()) {
+        log("Shizuku権限が付与されませんでした → スキップ");
+        return;
+    }
+}
+
+log("Shizuku OK → ワイヤレスデバッグ有効化");
+
+// PORT 5555 で既にLISTENしているか確認
+var tcpHex = (ADB_PORT).toString(16).toUpperCase();
+while (tcpHex.length < 4) tcpHex = "0" + tcpHex;
+
+var tcpOut = "";
+shell.exec("cat /proc/net/tcp6 /proc/net/tcp 2>/dev/null | grep " + tcpHex, function(o) {
+    tcpOut = o;
+});
+java.lang.Thread.sleep(500);
+
+if (tcpOut.trim().length > 0) {
+    log("adbd 既にLISTEN中 → スキップ");
+    return;
+}
+
+// ADB権限でワイヤレスデバッグON + adbd起動
+shizuku.exec("settings put global adb_wifi_enabled 1", function(r) {
+    log("adb_wifi_enabled=1: " + r.trim());
+});
+java.lang.Thread.sleep(300);
+
+shizuku.exec("setprop service.adb.tcp.port " + ADB_PORT, function(r) {
+    log("tcp.port=" + ADB_PORT + ": " + r.trim());
+});
+java.lang.Thread.sleep(300);
+
+shizuku.exec("stop adbd", function() {});
+java.lang.Thread.sleep(1000);
+
+shizuku.exec("start adbd", function() {});
+java.lang.Thread.sleep(2000);
+
+// LISTEN確認
+var listenOut = "";
+shell.exec("cat /proc/net/tcp6 /proc/net/tcp 2>/dev/null | grep " + tcpHex, function(o) {
+    listenOut = o;
+});
+java.lang.Thread.sleep(500);
+
+if (listenOut.trim().length > 0) {
+    log("adbd 起動確認 (PORT " + ADB_PORT + ") ✅");
+} else {
+    log("adbd 起動未確認 → adb.rjs で再試行します");
+}
+
+})();

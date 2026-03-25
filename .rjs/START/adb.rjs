@@ -1,1 +1,234 @@
+// adb.rjs
+// 自前adbバイナリ（MWV-Script/bin/adb）でlocalhost:5555に接続し
+// ADB権限でコマンドを実行するブリッジ
+//
+// 前提:
+//   - /storage/emulated/0/download/MWV-Script/bin/adb が存在する
+//   - 設定 > 開発者向けオプション > ワイヤレスデバッグ が有効
+//
+// 使い方:
+//   load("Script/adb.rjs");
+//   adb("id", function(o){ print(o); });
+//   adb.connect(callback);   // 接続のみ
+//   adb.disconnect();
+//   adb.shell("cmd", cb);    // adb shell 経由
+//   adb.exec("cmd", cb);     // adb exec-out 経由（バイナリ出力対応）
 
+(function() {
+
+    var BIN   = "/storage/emulated/0/download/MWV-Script/bin/adb";
+    var HOST  = "localhost:5555";
+    var connected = false;
+
+    // ============================================================
+    // 内部ユーティリティ
+    // ============================================================
+    function sh(cmd, callback) {
+        shell.exec(cmd, function(out) {
+            callback(out ? out.trim() : "");
+        });
+    }
+
+    function log(msg) { print("[adb] " + msg); }
+
+    // ============================================================
+    // adbバイナリ確認
+    // ============================================================
+    function checkBin(callback) {
+        sh("ls " + BIN + " 2>/dev/null", function(out) {
+            if (out.indexOf("adb") !== -1) {
+                // bin/ 配下の全バイナリに実行権限を付与（zip展開で権限が剥がれるため）
+                var binDir = BIN.substring(0, BIN.lastIndexOf("/"));
+                sh("chmod 755 " + binDir + " && chmod -R 755 " + binDir, function() {
+                    callback(true);
+                });
+            } else {
+                log("adbバイナリが見つかりません: " + BIN);
+                log("bin.zip を MWV-Script/ 直下に解凍してください");
+                callback(false);
+            }
+        });
+    }
+
+    // ============================================================
+    // ワイヤレスデバッグ確認
+    // ============================================================
+    function checkWirelessDebugging(callback) {
+        sh("ss -tlnp 2>/dev/null | grep ':5555'", function(out) {
+            if (out.length > 0) {
+                log("ワイヤレスデバッグ確認 (port 5555)");
+                callback(true);
+            } else {
+                sh("getprop service.adb.tcp.port 2>/dev/null", function(port) {
+                    if (port && port !== "-1" && port !== "0" && port !== "") {
+                        log("ワイヤレスデバッグ確認 (port " + port + ")");
+                        HOST = "localhost:" + port;
+                        callback(true);
+                    } else {
+                        log("ワイヤレスデバッグが有効になっていません");
+                        log("設定 > 開発者向けオプション > ワイヤレスデバッグ をONにしてください");
+                        callback(false);
+                    }
+                });
+            }
+        });
+    }
+
+    // ============================================================
+    // 接続
+    // ============================================================
+    function connect(callback) {
+        if (connected) {
+            callback(true);
+            return;
+        }
+        log("接続中: " + HOST + " ...");
+
+        // 既存セッションをリセット
+        sh(BIN + " disconnect " + HOST + " 2>/dev/null", function() {
+            sh(BIN + " connect " + HOST + " 2>/dev/null", function(out) {
+                log("connect: " + out);
+                if (out.indexOf("connected") !== -1 ||
+                    out.indexOf("already connected") !== -1) {
+                    connected = true;
+                    log("✅ ADB接続完了: " + HOST);
+                    callback(true);
+                } else {
+                    log("接続失敗: " + out);
+                    connected = false;
+                    callback(false);
+                }
+            });
+        });
+    }
+
+    // ============================================================
+    // コマンド実行（接続済み前提）
+    // ============================================================
+    function runCmd(cmd, callback) {
+        var fullCmd = BIN + " -s " + HOST + " shell " + cmd;
+        sh(fullCmd, function(out) {
+            if (callback) callback(out);
+        });
+    }
+
+    // ============================================================
+    // メイン関数: adb(cmd, callback)
+    // 未接続なら自動で接続してから実行
+    // ============================================================
+    function adbMain(cmd, callback) {
+        if (connected) {
+            runCmd(cmd, callback);
+            return;
+        }
+        bThread(function() {
+            checkBin(function(binOk) {
+                if (!binOk) { if (callback) callback("ERROR: adb not found"); return; }
+                checkWirelessDebugging(function(wdOk) {
+                    if (!wdOk) { if (callback) callback("ERROR: wireless debugging disabled"); return; }
+                    connect(function(connOk) {
+                        if (!connOk) { if (callback) callback("ERROR: connect failed"); return; }
+                        runCmd(cmd, callback);
+                    });
+                });
+            });
+        });
+    }
+
+    // ============================================================
+    // 初期化（接続確立）
+    // ============================================================
+    function init(callback) {
+        bThread(function() {
+            checkBin(function(binOk) {
+                if (!binOk) { if (callback) callback(false); return; }
+                checkWirelessDebugging(function(wdOk) {
+                    if (!wdOk) { if (callback) callback(false); return; }
+                    connect(function(connOk) {
+                        if (connOk) {
+                            // 動作確認
+                            runCmd("id", function(idOut) {
+                                log("id: " + idOut);
+                                popup("ADB接続完了\n" + idOut);
+                                if (callback) callback(true);
+                            });
+                        } else {
+                            if (callback) callback(false);
+                        }
+                    });
+                });
+            });
+        });
+    }
+
+    // ============================================================
+    // グローバル公開
+    // ============================================================
+    adb = adbMain;
+
+    adb.connect    = function(cb) {
+        bThread(function() {
+            checkBin(function(ok) {
+                if (!ok) { if (cb) cb(false); return; }
+                checkWirelessDebugging(function(ok2) {
+                    if (!ok2) { if (cb) cb(false); return; }
+                    connect(cb);
+                });
+            });
+        });
+    };
+
+    adb.disconnect = function() {
+        sh(BIN + " disconnect " + HOST + " 2>/dev/null", function(o) {
+            log("disconnect: " + o);
+            connected = false;
+        });
+    };
+
+    // adb shell 経由（adb()と同じ）
+    adb.shell = adbMain;
+
+    // adb exec-out 経由（改行コード等をそのまま受け取る）
+    adb.exec = function(cmd, callback) {
+        var fullCmd = BIN + " -s " + HOST + " exec-out " + cmd;
+        sh(fullCmd, function(out) {
+            if (callback) callback(out);
+        });
+    };
+
+    // adb install
+    adb.install = function(apkPath, callback) {
+        sh(BIN + " -s " + HOST + " install -r " + apkPath, function(out) {
+            log("install: " + out);
+            if (callback) callback(out);
+        });
+    };
+
+    // adb push
+    adb.push = function(local, remote, callback) {
+        sh(BIN + " -s " + HOST + " push " + local + " " + remote, function(out) {
+            log("push: " + out);
+            if (callback) callback(out);
+        });
+    };
+
+    // adb pull
+    adb.pull = function(remote, local, callback) {
+        sh(BIN + " -s " + HOST + " pull " + remote + " " + local, function(out) {
+            log("pull: " + out);
+            if (callback) callback(out);
+        });
+    };
+
+    adb.isConnected = function() { return connected; };
+    adb.host        = function() { return HOST; };
+    adb.bin         = BIN;
+    adb.init        = init;
+
+    // ============================================================
+    // 読み込み時に自動接続
+    // ============================================================
+    log("adb.rjs 読み込み完了");
+    log("adb.init() で接続 / adb(cmd, cb) でコマンド実行");
+
+})();
