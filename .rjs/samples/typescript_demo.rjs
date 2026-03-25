@@ -1,0 +1,42 @@
+// typescript_demo.rjs
+// JAS library: TypeScript compiler
+// CDN: https://cdnjs.cloudflare.com/ajax/libs/typescript/5.3.3/typescript.min.js
+
+var SESSION = "ts_demo";
+
+web.open("about:blank", SESSION);
+
+bThread(function() {
+    java.lang.Thread.sleep(1500);
+
+    // TypeScriptコンパイラをCDNから読み込む
+    web.eval([
+        "var s = document.createElement('script');",
+        "s.src = 'https://cdnjs.cloudflare.com/ajax/libs/typescript/5.3.3/typescript.min.js';",
+        "s.onload = function() { window._tsReady = true; };",
+        "document.head.appendChild(s);"
+    ].join(""), SESSION);
+
+    java.lang.Thread.sleep(4000);
+
+    // TypeScriptコードをコンパイルして実行
+    var tsCode = [
+        "interface User { name: string; age: number; }",
+        "function greet(user: User): string {",
+        "  return `${user.name} is ${user.age} years old`;",
+        "}",
+        "const result = greet({ name: 'MWV', age: 1 });"
+    ].join("\n");
+
+    web.eval([
+        "if(window._tsReady) {",
+        "  var js = ts.transpileModule(" + JSON.stringify(tsCode) + ", {",
+        "    compilerOptions: { module: ts.ModuleKind.None }",
+        "  }).outputText;",
+        "  eval(js);",
+        "  result;",
+        "} else { 'TypeScript not ready'; }"
+    ].join(""), SESSION, function(r) {
+        print("[TypeScript] コンパイル結果: " + r);
+    });
+});

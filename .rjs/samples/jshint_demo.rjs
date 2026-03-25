@@ -1,0 +1,55 @@
+// jshint_demo.rjs
+// JAS library: JSHint (JavaScriptコード品質チェック)
+// CDN: https://cdnjs.cloudflare.com/ajax/libs/jshint/2.13.6/jshint.min.js
+//
+// rjsファイルの内容を品質チェックするユーティリティとしても使える
+
+var SESSION = "jshint_demo";
+
+web.open("about:blank", SESSION);
+
+bThread(function() {
+    java.lang.Thread.sleep(1500);
+
+    web.eval([
+        "var s = document.createElement('script');",
+        "s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jshint/2.13.6/jshint.min.js';",
+        "s.onload = function() { window._jshintReady = true; };",
+        "document.head.appendChild(s);"
+    ].join(""), SESSION);
+
+    java.lang.Thread.sleep(3000);
+
+    // チェック対象のコード
+    var code = [
+        "var x = 1",         // セミコロンなし
+        "var y = undefined", // undefinedの直接参照
+        "if(x == y) {",      // == (===推奨)
+        "  console.log(x)",
+        "}"
+    ].join("\n");
+
+    web.eval([
+        "if(window._jshintReady) {",
+        "  JSHINT(" + JSON.stringify(code) + ", {esversion:5, undef:false});",
+        "  var errs = JSHINT.errors.filter(function(e){ return e; });",
+        "  JSON.stringify(errs.map(function(e){",
+        "    return 'L' + e.line + ': ' + e.reason;",
+        "  }));",
+        "} else { '[]'; }"
+    ].join(""), SESSION, function(r) {
+        print("[JSHint] 検出された問題:");
+        try {
+            var issues = JSON.parse(r);
+            if (issues.length === 0) {
+                print("  問題なし");
+            } else {
+                for (var i = 0; i < issues.length; i++) {
+                    print("  " + issues[i]);
+                }
+            }
+        } catch(e) {
+            print("  " + r);
+        }
+    });
+});

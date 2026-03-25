@@ -1,0 +1,46 @@
+// beautify_demo.rjs
+// JAS library: js-beautify (JS/CSS/HTML整形)
+// CDN: https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify.min.js
+//      https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify-css.min.js
+//      https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify-html.min.js
+
+var SESSION = "beautify_demo";
+
+web.open("about:blank", SESSION);
+
+bThread(function() {
+    java.lang.Thread.sleep(1500);
+
+    // js-beautifyをCDNから読み込む
+    web.eval([
+        "var scripts = [",
+        "  'https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify.min.js',",
+        "  'https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify-css.min.js',",
+        "  'https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify-html.min.js'",
+        "];",
+        "var loaded = 0;",
+        "scripts.forEach(function(src) {",
+        "  var s = document.createElement('script');",
+        "  s.src = src;",
+        "  s.onload = function() { if(++loaded === 3) window._beautifyReady = true; };",
+        "  document.head.appendChild(s);",
+        "});"
+    ].join(""), SESSION);
+
+    java.lang.Thread.sleep(3000);
+
+    // 整形対象のコード（あえて汚く書いてある）
+    var uglyJs  = "function f(a,b){return a+b;}var x=f(1,2);if(x>0){print(x);}";
+    var uglyCss = "body{margin:0;padding:0;font-size:14px;color:#333;}h1{font-weight:bold;}";
+
+    web.eval([
+        "if(window._beautifyReady) {",
+        "  var jsResult  = js_beautify(" + JSON.stringify(uglyJs)  + ", {indent_size:2});",
+        "  var cssResult = css_beautify(" + JSON.stringify(uglyCss) + ", {indent_size:2});",
+        "  JSON.stringify({js: jsResult, css: cssResult});",
+        "} else { JSON.stringify({error:'not ready'}); }"
+    ].join(""), SESSION, function(r) {
+        print("[beautify] 結果:");
+        print(r);
+    });
+});

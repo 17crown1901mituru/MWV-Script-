@@ -1,0 +1,93 @@
+// jas_loader.rjs
+// JASライブラリ一括ローダー
+// 任意のWebViewセッションに必要なライブラリを注入するユーティリティ
+//
+// 使い方:
+//   load("samples/jas_loader.rjs");
+//   JAS.load("babel", "my_session", function() {
+//       web.eval("Babel.transform('const x = 1', {presets:[\"env\"]}).code", "my_session", function(r){
+//           print(r);
+//       });
+//   });
+
+JAS = {
+
+    // ライブラリ定義（CDN URL）
+    libs: {
+        "babel":       "https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js",
+        "typescript":  "https://cdnjs.cloudflare.com/ajax/libs/typescript/5.3.3/typescript.min.js",
+        "eruda":       "https://cdnjs.cloudflare.com/ajax/libs/eruda/3.0.1/eruda.min.js",
+        "brython":     "https://cdnjs.cloudflare.com/ajax/libs/brython/3.12.3/brython.min.js",
+        "brython-std": "https://cdnjs.cloudflare.com/ajax/libs/brython/3.12.3/brython_stdlib.js",
+        "beautify":    "https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify.min.js",
+        "beautify-css":"https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify-css.min.js",
+        "beautify-html":"https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.1/beautify-html.min.js",
+        "jshint":      "https://cdnjs.cloudflare.com/ajax/libs/jshint/2.13.6/jshint.min.js",
+        "livescript":  "https://cdnjs.cloudflare.com/ajax/libs/livescript/1.6.1/livescript.min.js",
+        "csslint":     "https://cdnjs.cloudflare.com/ajax/libs/csslint/1.0.5/csslint.min.js",
+        "htmlhint":    "https://cdnjs.cloudflare.com/ajax/libs/htmlhint/1.1.4/htmlhint.min.js"
+    },
+
+    // 単一ライブラリをセッションに注入
+    // JAS.load("babel", "sessionId", callback)
+    load: function(name, sessionId, callback) {
+        var url = JAS.libs[name];
+        if (!url) {
+            print("[JAS] 未定義のライブラリ: " + name);
+            if (callback) callback(false);
+            return;
+        }
+        var flagKey = "_jas_" + name.replace(/[^a-zA-Z0-9]/g, "_");
+        var js = [
+            "(function(){",
+            "  if(window['" + flagKey + "']) { window['_jas_cb_result'] = true; return; }",
+            "  var s = document.createElement('script');",
+            "  s.src = '" + url + "';",
+            "  s.onload = function() {",
+            "    window['" + flagKey + "'] = true;",
+            "    window['_jas_cb_result'] = true;",
+            "  };",
+            "  s.onerror = function() { window['_jas_cb_result'] = false; };",
+            "  document.head.appendChild(s);",
+            "}());"
+        ].join("");
+
+        web.eval(js, sessionId);
+
+        if (callback) {
+            bThread(function() {
+                java.lang.Thread.sleep(3000);
+                web.eval("window['_jas_cb_result'] === true", sessionId, function(r) {
+                    callback(r === "true");
+                });
+            });
+        }
+    },
+
+    // 複数ライブラリを順番に注入
+    // JAS.loadAll(["babel","eruda"], "sessionId", callback)
+    loadAll: function(names, sessionId, callback) {
+        var i = 0;
+        function next(ok) {
+            if (!ok) { print("[JAS] ロード失敗: " + names[i-1]); }
+            if (i >= names.length) {
+                if (callback) callback(true);
+                return;
+            }
+            JAS.load(names[i++], sessionId, next);
+        }
+        next(true);
+    },
+
+    // 利用可能なライブラリ一覧を表示
+    list: function() {
+        print("[JAS] 利用可能なライブラリ:");
+        var keys = Object.keys(JAS.libs);
+        for (var i = 0; i < keys.length; i++) {
+            print("  " + keys[i] + " → " + JAS.libs[keys[i]]);
+        }
+    }
+};
+
+print("[JAS] jas_loader.rjs 読み込み完了");
+print("[JAS] JAS.list() で利用可能ライブラリを確認できます");

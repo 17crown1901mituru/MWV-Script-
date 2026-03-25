@@ -1,0 +1,30 @@
+// eruda_demo.rjs
+// JAS library: eruda (WebViewデバッグコンソール)
+// CDN: https://cdnjs.cloudflare.com/ajax/libs/eruda/3.0.1/eruda.min.js
+//
+// 使い方: 任意のWebViewタブにerudaを注入してデバッグコンソールを表示する
+
+// 注入先のセッションIDを指定（省略するとdefault）
+var TARGET_SESSION = "default";
+
+// erudaをCDNから注入して初期化
+web.eval([
+    "(function() {",
+    "  if(window._erudaLoaded) { eruda.show(); return; }",
+    "  var s = document.createElement('script');",
+    "  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/eruda/3.0.1/eruda.min.js';",
+    "  s.onload = function() {",
+    "    eruda.init();",
+    "    eruda.show();",
+    "    window._erudaLoaded = true;",
+    "    console.log('eruda ready - MWV Script debugger');",
+    "  };",
+    "  document.head.appendChild(s);",
+    "}());"
+].join(""), TARGET_SESSION, function(r) {
+    print("[eruda] 注入完了: " + TARGET_SESSION);
+});
+
+// 既に開いているWebViewのURLを確認
+print("[eruda] 対象セッション: " + TARGET_SESSION);
+print("[eruda] 現在のURL: " + web.url(TARGET_SESSION));

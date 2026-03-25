@@ -1,0 +1,60 @@
+// brython_demo.rjs
+// JAS library: Brython (ブラウザでPythonを実行)
+// CDN: https://cdnjs.cloudflare.com/ajax/libs/brython/3.12.3/brython.min.js
+//      https://cdnjs.cloudflare.com/ajax/libs/brython/3.12.3/brython_stdlib.js
+
+var SESSION = "brython_demo";
+
+// Pythonコードを埋め込んだHTMLページを直接開く
+var html = [
+    "<!DOCTYPE html><html><head>",
+    "<meta charset='utf-8'>",
+    "<script src='https://cdnjs.cloudflare.com/ajax/libs/brython/3.12.3/brython.min.js'></script>",
+    "<script src='https://cdnjs.cloudflare.com/ajax/libs/brython/3.12.3/brython_stdlib.js'></script>",
+    "</head>",
+    "<body onload='brython()'>",
+    "<div id='output'></div>",
+    "<script type='text/python'>",
+    "from browser import document",
+    "import math",
+    "",
+    "# Pythonコードをここに書く",
+    "result = [i**2 for i in range(1, 6)]",
+    "pi_approx = round(math.pi, 4)",
+    "",
+    "document['output'].html = (",
+    "    '<b>Python in WebView (Brython)</b><br>' +",
+    "    'squares: ' + str(result) + '<br>' +",
+    "    'pi: ' + str(pi_approx)",
+    ")",
+    "window._brythonResult = str(result)",
+    "</script>",
+    "</body></html>"
+].join("\n");
+
+// data URIとしてWebViewに読み込む
+var encoded = "data:text/html;charset=utf-8," + encodeURIComponent(html);
+web.open(encoded, SESSION);
+
+bThread(function() {
+    java.lang.Thread.sleep(5000);
+    web.eval("window._brythonResult || 'pending'", SESSION, function(r) {
+        print("[Brython] Python実行結果: " + r);
+    });
+});
+
+// encodeURIComponent: Java URLEncoder を使用
+function encodeURIComponent(str) {
+    try {
+        return Packages.java.net.URLEncoder.encode(str, "UTF-8")
+            .replace(/\+/g, "%20")
+            .replace(/%21/g, "!")
+            .replace(/%27/g, "'")
+            .replace(/%28/g, "(")
+            .replace(/%29/g, ")")
+            .replace(/%7E/g, "~");
+    } catch(e) {
+        print("[brython] encodeURIComponent エラー: " + e);
+        return str;
+    }
+}

@@ -1,0 +1,14 @@
+var f = new Packages.java.io.File("/storage/emulated/0/download/MWV-Script/bookmark.json");
+var list = [];
+if (f.exists()) {
+    var br = new Packages.java.io.BufferedReader(new Packages.java.io.FileReader(f));
+    var sb = new Packages.java.lang.StringBuilder();
+    var line;
+    while ((line = br.readLine()) !== null) sb.append(line);
+    br.close();
+    list = JSON.parse(sb.toString());
+}
+list.push({title: "Tantora", url: "https://tantora.jp"});
+var fw = new Packages.java.io.FileWriter(f);
+fw.write(JSON.stringify(list));
+fw.close();

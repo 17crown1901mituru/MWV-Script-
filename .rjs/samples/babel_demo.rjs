@@ -1,1 +1,40 @@
+// babel_demo.rjs
+// JAS library: Babel (ES6→ES5トランスパイラ)
+// CDN: https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js
 
+var SESSION = "babel_demo";
+
+// WebViewを開いてBabelをCDNから注入する
+web.open("about:blank", SESSION);
+
+bThread(function() {
+    // WebView起動を少し待つ
+    java.lang.Thread.sleep(1500);
+
+    // BabelをCDNから読み込む
+    web.eval([
+        "var s = document.createElement('script');",
+        "s.src = 'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js';",
+        "s.onload = function() { window._babelReady = true; };",
+        "document.head.appendChild(s);"
+    ].join(""), SESSION);
+
+    java.lang.Thread.sleep(3000);
+
+    // ES6コードをトランスパイルして実行
+    var es6code = [
+        "const greet = (name) => `Hello, ${name}!`;",
+        "const nums = [1, 2, 3].map(n => n * 2);",
+        "window._babelResult = greet('MWV') + ' / nums: ' + nums.join(',');"
+    ].join("\n");
+
+    web.eval([
+        "if(window._babelReady) {",
+        "  var result = Babel.transform(" + JSON.stringify(es6code) + ", {presets:['env']});",
+        "  eval(result.code);",
+        "  window._babelResult;",
+        "} else { 'Babel not ready'; }"
+    ].join(""), SESSION, function(result) {
+        print("[Babel] トランスパイル結果: " + result);
+    });
+});

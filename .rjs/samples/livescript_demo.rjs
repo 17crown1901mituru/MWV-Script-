@@ -1,0 +1,37 @@
+// livescript_demo.rjs
+// JAS library: LiveScript 1.6.1 (AltJS → JS コンパイラ)
+// CDN: https://cdnjs.cloudflare.com/ajax/libs/livescript/1.6.1/livescript.min.js
+
+var SESSION = "livescript_demo";
+
+web.open("about:blank", SESSION);
+
+bThread(function() {
+    java.lang.Thread.sleep(1500);
+
+    web.eval([
+        "var s = document.createElement('script');",
+        "s.src = 'https://cdnjs.cloudflare.com/ajax/libs/livescript/1.6.1/livescript.min.js';",
+        "s.onload = function() { window._lsReady = true; };",
+        "document.head.appendChild(s);"
+    ].join(""), SESSION);
+
+    java.lang.Thread.sleep(3000);
+
+    // LiveScriptコード（CoffeeScript系の簡潔な記法）
+    var lsCode = [
+        "double = (x) -> x * 2",
+        "nums   = [1 2 3 4 5]",
+        "result = nums |> map double",
+        "result.join ', '"
+    ].join("\n");
+
+    web.eval([
+        "if(window._lsReady) {",
+        "  var js = require('livescript').compile(" + JSON.stringify(lsCode) + ", {bare:true});",
+        "  eval(js);",
+        "} else { 'LiveScript not ready'; }"
+    ].join(""), SESSION, function(r) {
+        print("[LiveScript] コンパイル・実行結果: " + r);
+    });
+});
