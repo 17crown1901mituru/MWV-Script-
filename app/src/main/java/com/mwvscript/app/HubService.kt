@@ -49,7 +49,6 @@ class HubService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        MiniDaemonServiceLocator.notifyAvailable(this)
         createNotificationChannel()
         // Xperia電力管理対策：onCreate直後にstartForeground
         startForeground(NOTIF_ID, buildNotification("MWV Script 起動中..."))
@@ -107,9 +106,6 @@ class HubService : Service() {
                 var org     = Packages.org;
                 var dalvik  = Packages.dalvik;
             """.trimIndent(), "<init>", 1, null)
-
-            // 標準ブリッジ注入
-            injectBuiltins(cx, scope)
 
             // 各サービスのブリッジ注入（起動済みなら即注入）
             injectBuiltins(cx, scope)
