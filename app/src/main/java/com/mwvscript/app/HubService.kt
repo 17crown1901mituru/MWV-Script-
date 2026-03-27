@@ -109,7 +109,7 @@ class HubService : Service() {
 
             // 各サービスのブリッジ注入（起動済みなら即注入）
             injectBuiltins(cx, scope)
-         　 OverlayService.instance?.injectOverlayBridge()
+            OverlayService.instance?.injectOverlayBridge()
             MWVAccessibilityService.instance?.injectAccessibilityBridge()
             MWVNotificationListener.instance?.injectNotifyBridge()
             MWVTileService.instance?.injectTileBridge()
