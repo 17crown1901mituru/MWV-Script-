@@ -114,9 +114,8 @@ class HubService : Service() {
             MWVNotificationListener.instance?.injectNotifyBridge()
             MWVTileService.instance?.injectTileBridge()
             // ★ mini‑daemon 用 SessionState
-   　       sessionState = SessionStateImpl()
-
-           // ★ mini‑daemon ブリッジ初期化
+            sessionState = SessionStateImpl()
+            // ★ mini‑daemon ブリッジ初期化
            daemonBridge = RjsDaemonBridge(
            context = this,
            hub = this,
