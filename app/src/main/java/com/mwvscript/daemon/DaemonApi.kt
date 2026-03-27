@@ -16,7 +16,3 @@ data class ExecResult(
     val exitCode: Int
 )
 
-interface SessionState {
-    fun set(key: String, value: Any?)
-    fun get(key: String): Any?
-}
