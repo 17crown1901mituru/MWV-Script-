@@ -4,6 +4,10 @@ apply plugin: 'org.jetbrains.kotlin.android'
 android {
     namespace 'com.mwvscript.app'
     compileSdk 34
+    buildFeatures {
+        aidl true
+    }
+}
 
     defaultConfig {
         applicationId "com.mwvscript.app"
