@@ -14,6 +14,8 @@ import org.mozilla.javascript.*
 import org.mozilla.javascript.Context as RhinoContext
 
 class HubService : Service() {
+    private lateinit var daemonBridge: RjsDaemonBridge
+    private lateinit var sessionState: SessionStateImpl
 
     companion object {
         const val TAG          = "HubService"
@@ -47,6 +49,7 @@ class HubService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        MiniDaemonServiceLocator.notifyAvailable(this)
         createNotificationChannel()
         // Xperia電力管理対策：onCreate直後にstartForeground
         startForeground(NOTIF_ID, buildNotification("MWV Script 起動中..."))
@@ -109,10 +112,35 @@ class HubService : Service() {
             injectBuiltins(cx, scope)
 
             // 各サービスのブリッジ注入（起動済みなら即注入）
-            OverlayService.instance?.injectOverlayBridge()
+            injectBuiltins(cx, scope)
+         　 OverlayService.instance?.injectOverlayBridge()
             MWVAccessibilityService.instance?.injectAccessibilityBridge()
             MWVNotificationListener.instance?.injectNotifyBridge()
             MWVTileService.instance?.injectTileBridge()
+            // ★ mini‑daemon 用 SessionState
+   　       sessionState = SessionStateImpl()
+
+           // ★ mini‑daemon ブリッジ初期化
+           daemonBridge = RjsDaemonBridge(
+           context = this,
+           hub = this,
+           session = sessionState
+           )
+
+          // ★ MiniDaemonService を起動
+          val intent = Intent(this, MiniDaemonService::class.java)
+          startForegroundService(intent)
+
+          // ★ Service インスタンスをブリッジに渡す
+          MiniDaemonServiceLocator.onAvailable { svc ->
+          daemonBridge.attachService(svc)
+          }
+
+         // ★ JS に DaemonController / ShellExecutor / SessionState を登録
+         val api = daemonBridge.exportToJs()
+         for ((name, obj) in api) {
+         ScriptableObject.putProperty(scope, name, Context.javaToJS(obj, scope))
+         }
 
             isReady = true
             updateNotification("MWV Script 実行中")
