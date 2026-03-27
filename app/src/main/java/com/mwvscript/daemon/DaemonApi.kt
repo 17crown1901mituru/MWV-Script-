@@ -1,4 +1,4 @@
-package your.package.name.daemon
+package com.mwvscript.app
 
 interface DaemonController {
     fun start(port: Int = 5555)
