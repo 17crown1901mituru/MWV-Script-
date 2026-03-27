@@ -1,4 +1,4 @@
-package com.mwvscript.app.daemona
+package com.mwvscript.app.daemon
 
 import android.content.Context
 import android.content.Intent
@@ -6,8 +6,7 @@ import com.mwvscript.app.HubService
 
 class RjsDaemonBridge(
     private val context: Context,
-    private val hub: HubService,
-    private val session: SessionState
+    private val hub: HubService
 ) {
 
     private var service: MiniDaemonService? = null
@@ -21,19 +20,18 @@ class RjsDaemonBridge(
         }
     }
 
-    // rjs に公開する API をまとめて返す
     fun exportToJs(): Map<String, Any> {
         return mapOf(
             "DaemonController" to object {
                 fun start(port: Int) {
                     ensureService()
                     service?.startDaemon(port)
-                    session.set("daemon.running", true)
+                    hub.setSession("daemon.running", true)
                 }
 
                 fun stop() {
                     service?.stopDaemon()
-                    session.set("daemon.running", false)
+                    hub.setSession("daemon.running", false)
                 }
 
                 fun sendToClient(bytes: ByteArray) {
@@ -43,18 +41,13 @@ class RjsDaemonBridge(
 
             "ShellExecutor" to object {
                 fun exec(cmd: String): Map<String, Any> {
-                    val result = hub.shellExec(cmd) // 既存の shell.exec を利用
+                    val result = hub.shellExec(cmd)
                     return mapOf(
                         "stdout" to result.stdout,
                         "stderr" to result.stderr,
                         "exitCode" to result.exitCode
                     )
                 }
-            },
-
-            "SessionState" to object {
-                fun set(key: String, value: Any?) = session.set(key, value)
-                fun get(key: String): Any? = session.get(key)
             }
         )
     }
