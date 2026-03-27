@@ -1,8 +1,8 @@
-package com.mwvscript.app
+package com.mwvscript.app.daemona
 
 import android.content.Context
 import android.content.Intent
-import your.package.name.HubService
+import com.mwvscript.app.HubService
 
 class RjsDaemonBridge(
     private val context: Context,
