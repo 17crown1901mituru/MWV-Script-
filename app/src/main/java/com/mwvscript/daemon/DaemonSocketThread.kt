@@ -1,4 +1,4 @@
-package com.mwvscript.app
+package com.mwvscript.app.daemon
 
 import android.util.Log
 import java.io.InputStream
