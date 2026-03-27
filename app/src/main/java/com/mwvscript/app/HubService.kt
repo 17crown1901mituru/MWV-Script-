@@ -116,26 +116,23 @@ class HubService : Service() {
             // ★ mini‑daemon 用 SessionState
             sessionState = SessionStateImpl()
             // ★ mini‑daemon ブリッジ初期化
-           daemonBridge = RjsDaemonBridge(
-           context = this,
-           hub = this,
-           session = sessionState
-           )
+            daemonBridge = RjsDaemonBridge(
+                context = this,
+                hub = this,
+                session = sessionState
+            )
+            // ★ MiniDaemonService を起動
+            val intent = Intent(this, MiniDaemonService::class.java)
+            startForegroundService(intent)
 
-          // ★ MiniDaemonService を起動
-          val intent = Intent(this, MiniDaemonService::class.java)
-          startForegroundService(intent)
-
-          // ★ Service インスタンスをブリッジに渡す
-          MiniDaemonServiceLocator.onAvailable { svc ->
-          daemonBridge.attachService(svc)
-          }
-
-         // ★ JS に DaemonController / ShellExecutor / SessionState を登録
-         val api = daemonBridge.exportToJs()
-         for ((name, obj) in api) {
-         ScriptableObject.putProperty(scope, name, Context.javaToJS(obj, scope))
-         }
+            // ★ Service インスタンスをブリッジに渡す
+            MiniDaemonServiceLocator.onAvailable { svc ->
+                daemonBridge.attachService(svc)
+            }
+            // ★ JS に DaemonController / ShellExecutor / SessionState を登録
+            val api = daemonBridge.exportToJs()
+            for ((name, obj) in api) {ScriptableObject.putProperty(scope, name, Context.javaToJS(obj, scope))
+            }
 
             isReady = true
             updateNotification("MWV Script 実行中")
