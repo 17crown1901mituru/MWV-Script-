@@ -1,4 +1,4 @@
-package your.package.name.daemon
+package com.mwvscript.app
 
 import android.content.Context
 import android.content.Intent
