@@ -11,6 +11,7 @@ class MiniDaemonService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        MiniDaemonServiceLocator.notifyAvailable(this)
         Log.d("MiniDaemon", "Service created")
     }
 
